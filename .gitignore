@@ -1,0 +1,13 @@
+# OpenCode orchestration state
+.omo/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
