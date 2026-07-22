@@ -1,13 +1,13 @@
 # TradingAgents Analysis Skill
 
+**English** | [中文](README_CN.md)
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 
 A multi-agent stock and crypto trading analysis skill for AI agents, inspired by [TradingAgents](https://github.com/TauricResearch/TradingAgents) and [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN).
 
 > **RESEARCH AND EDUCATION ONLY.** This skill does not constitute financial advice.
-
-[Chinese Documentation](README_CN.md)
 
 ---
 
@@ -40,19 +40,23 @@ The pipeline runs in six stages:
 ### Via npx skill (recommended)
 
 ```bash
-npx skill add /path/to/trad-skill
+npx skill add halfoffive/trad-skill/tradingagents-analysis
 ```
+
+### Tell your AI agent to install it
+
+> Install the tradingagents-analysis skill from halfoffive/trad-skill
 
 ### Manual installation
 
-Copy this directory to your AI agent's skills folder:
+Copy the skill subfolder to your AI agent's skills directory:
 
 ```bash
 # For Claude Code / OpenCode (user-level)
-cp -r trad-skill ~/.agents/skills/tradingagents-analysis
+cp -r tradingagents-analysis ~/.agents/skills/tradingagents-analysis
 
 # For OpenCode (project-level)
-cp -r trad-skill .opencode/skills/tradingagents-analysis
+cp -r tradingagents-analysis .opencode/skills/tradingagents-analysis
 ```
 
 ---

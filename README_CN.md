@@ -1,13 +1,13 @@
 # TradingAgents 多智能体分析技能
 
+[English](README.md) | **中文**
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 
 基于 [TradingAgents](https://github.com/TauricResearch/TradingAgents) 和 [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN) 的多智能体股票/加密货币分析 AI 技能。
 
 > **仅供研究与学习使用** — 本技能不构成任何投资建议。
-
-[English Documentation](README.md)
 
 ---
 
@@ -36,19 +36,23 @@
 ### 通过 npx skill 安装（推荐）
 
 ```bash
-npx skill add /path/to/trad-skill
+npx skill add halfoffive/trad-skill/tradingagents-analysis
 ```
+
+### 让 AI 代理帮你安装
+
+> 安装 halfoffive/trad-skill 中的 tradingagents-analysis 技能
 
 ### 手动安装
 
-将本目录复制到 AI 代理的技能文件夹：
+将技能子目录复制到 AI 代理的技能文件夹：
 
 ```bash
 # Claude Code / OpenCode 用户级
-cp -r trad-skill ~/.agents/skills/tradingagents-analysis
+cp -r tradingagents-analysis ~/.agents/skills/tradingagents-analysis
 
 # OpenCode 项目级
-cp -r trad-skill .opencode/skills/tradingagents-analysis
+cp -r tradingagents-analysis .opencode/skills/tradingagents-analysis
 ```
 
 ---
