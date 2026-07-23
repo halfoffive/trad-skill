@@ -2,14 +2,16 @@
 
 ## What this repo is
 
-An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `npx skill add`.
+An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `npx halfoffive/trad-skill`.
 
 The core deliverable is `tradingagents-analysis/` (SKILL.md + references/ + scripts/). There is no build, no test suite, no CI.
 
 ## Structure
 
 ```
-trad-skill/                        # repo root (meta files)
+trad-skill/                        # repo root (meta files + installer)
+├── package.json                  # npx entry point (name: trad-skill)
+├── install.mjs                   # zero-dependency installer
 ├── README.md / README_CN.md       # bilingual docs with language switch
 ├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # this file
@@ -25,8 +27,16 @@ trad-skill/                        # repo root (meta files)
 ## Install command
 
 ```bash
-npx skill add halfoffive/trad-skill/tradingagents-analysis
+npx halfoffive/trad-skill
 ```
+
+## Installer (`package.json` + `install.mjs`)
+
+- `bin.trad-skill` → `install.mjs`, a zero-dependency Node ESM script.
+- Copies `tradingagents-analysis/` into the target agent's skills dir. Default target: `~/.claude/skills/tradingagents-analysis` (Claude Code). Flags: `--dir <path>`, `--agent claude|agents|opencode`.
+- Idempotent (removes existing dir first). Prints next steps + absolute script paths on success.
+- The `files` field in `package.json` controls what npx packs: `install.mjs`, `tradingagents-analysis/`, and the doc/LICENSE files. `.omo/` and `.codegraph/` are never packed.
+- Note: the old `npx skill add …` command relied on a third-party `skill` CLI (vercel-labs/codebuddy) that has no `add` subcommand and no `owner/repo/subdir` support — it never worked for this repo. The custom installer replaces it.
 
 ## Python script conventions
 
@@ -51,3 +61,6 @@ Prompts and methodology are distilled from these. When updating prompts, re-extr
 - `uv` is available with bundled Python; use `uv run python` for script checks.
 - No `requirements.txt` by design — deps are documented in README only.
 - Skill files live in `tradingagents-analysis/` subfolder — repo root is for meta files only.
+- **Script paths must be absolute.** A sub-agent's CWD is the user's project, so `SKILL.md` instructs the main agent to resolve the installed skill dir and pass absolute script paths into each spawn. Don't reintroduce relative `scripts/...` invocations.
+- **`SKILL.md §2` makes the agent ask for the ticker first** when the user hasn't named one. Keep this prerequisite step.
+- `akshare` is a soft dependency: every script wraps `import akshare` in `try/except ImportError → ak = None` and degrades to an error string / yfinance fallback. Don't make it a hard import.

@@ -13,8 +13,13 @@ import argparse
 import sys
 
 import yfinance as yf
-import akshare as ak
 import pandas as pd
+
+try:
+    import akshare as ak
+except ImportError:
+    # akshare 为可选依赖，缺失时 A股 接口降级，回退到 yfinance
+    ak = None
 
 
 def fetch_us_fundamentals(symbol: str) -> str:

@@ -37,11 +37,21 @@ The pipeline runs in six stages:
 
 ## Installation
 
-### Via npx skill (recommended)
+### Via npx (recommended)
 
 ```bash
-npx skill add halfoffive/trad-skill/tradingagents-analysis
+npx halfoffive/trad-skill
 ```
+
+This downloads and runs a tiny zero-dependency installer that copies the `tradingagents-analysis/` skill into `~/.claude/skills/tradingagents-analysis` (Claude Code). It prints the next steps when done. Options:
+
+```bash
+npx halfoffive/trad-skill --agent agents      # install to ~/.agents/skills
+npx halfoffive/trad-skill --agent opencode   # install to ~/.opencode/skills
+npx halfoffive/trad-skill --dir <path>       # install into a custom skills dir
+```
+
+> If `npx halfoffive/trad-skill` does not auto-run the installer on your npx version, use `npx -p halfoffive/trad-skill trad-skill`.
 
 ### Tell your AI agent to install it
 
@@ -52,7 +62,10 @@ npx skill add halfoffive/trad-skill/tradingagents-analysis
 Copy the skill subfolder to your AI agent's skills directory:
 
 ```bash
-# For Claude Code / OpenCode (user-level)
+# For Claude Code (user-level)
+cp -r tradingagents-analysis ~/.claude/skills/tradingagents-analysis
+
+# For OpenCode / generic (user-level)
 cp -r tradingagents-analysis ~/.agents/skills/tradingagents-analysis
 
 # For OpenCode (project-level)
@@ -60,6 +73,7 @@ cp -r tradingagents-analysis .opencode/skills/tradingagents-analysis
 ```
 
 ---
+
 
 ## Usage
 
@@ -138,35 +152,40 @@ Market auto-detection: `.SS` or `.SZ` suffix means A-shares, `.HK` means HK stoc
 ## Project Structure
 
 ```
-trad-skill/
-├── SKILL.md                    # Core skill instructions (pipeline, orchestration, output format)
-├── references/
-│   ├── prompts/                # 14 verbatim agent role prompts
-│   │   ├── market_analyst.md
-│   │   ├── sentiment_analyst.md
-│   │   ├── news_analyst.md
-│   │   ├── fundamentals_analyst.md
-│   │   ├── bull_researcher.md
-│   │   ├── bear_researcher.md
-│   │   ├── research_manager.md
-│   │   ├── trader.md
-│   │   ├── aggressive_risk.md
-│   │   ├── conservative_risk.md
-│   │   ├── neutral_risk.md
-│   │   ├── portfolio_manager.md
-│   │   ├── china_market_analyst.md
-│   │   ├── cn_news_analyst.md
-│   │   └── README.md
-│   ├── data-sources.md         # Data source catalog (US + CN markets)
-│   └── indicators.md           # Technical indicator reference
-├── scripts/
-│   ├── fetch_stock_data.py     # Stock OHLCV data fetcher (US/A-shares/HK/Crypto)
-│   ├── fetch_news.py           # News data fetcher (company + macro)
-│   ├── fetch_fundamentals.py   # Fundamentals data fetcher (financial statements)
-│   └── fetch_sentiment.py      # Sentiment data fetcher (StockTwits, Reddit)
-├── README.md                   # This file (English)
-├── README_CN.md                # Chinese documentation
-└── LICENSE                     # Apache 2.0
+trad-skill/                        # repo root (meta files + installer)
+├── package.json                  # npx entry point (name: trad-skill)
+├── install.mjs                   # zero-dependency installer (copies skill into the agent's skills dir)
+├── README.md                      # This file (English)
+├── README_CN.md                   # Chinese documentation
+├── CHANGELOG.md                   # Version history
+├── AGENTS.md                      # AI-agent onboarding doc
+└── LICENSE                        # Apache 2.0
+└── tradingagents-analysis/        # the installable skill
+    ├── SKILL.md                   # Core skill instructions (pipeline, orchestration, output format)
+    ├── references/
+    │   ├── prompts/               # 14 verbatim agent role prompts
+    │   │   ├── market_analyst.md
+    │   │   ├── sentiment_analyst.md
+    │   │   ├── news_analyst.md
+    │   │   ├── fundamentals_analyst.md
+    │   │   ├── bull_researcher.md
+    │   │   ├── bear_researcher.md
+    │   │   ├── research_manager.md
+    │   │   ├── trader.md
+    │   │   ├── aggressive_risk.md
+    │   │   ├── conservative_risk.md
+    │   │   ├── neutral_risk.md
+    │   │   ├── portfolio_manager.md
+    │   │   ├── china_market_analyst.md
+    │   │   ├── cn_news_analyst.md
+    │   │   └── README.md
+    │   ├── data-sources.md        # Data source catalog (US + CN markets)
+    │   └── indicators.md          # Technical indicator reference
+    └── scripts/
+        ├── fetch_stock_data.py    # Stock OHLCV data fetcher (US/A-shares/HK/Crypto)
+        ├── fetch_news.py          # News data fetcher (company + macro)
+        ├── fetch_fundamentals.py  # Fundamentals data fetcher (financial statements)
+        └── fetch_sentiment.py     # Sentiment data fetcher (StockTwits, Reddit)
 ```
 
 ---
@@ -191,11 +210,16 @@ See [references/data-sources.md](references/data-sources.md) for the full catalo
 
 ## Scripts
 
-Python helper scripts for data fetching. Functional style, no class definitions. Each script outputs formatted text suitable for LLM prompt injection.
+Python helper scripts for data fetching. Functional style, no class definitions. Each script outputs formatted text suitable for LLM prompt injection and never raises — on failure it prints an error message the agent can fall back from.
+
+> The agent must run these scripts by their **absolute path** inside the installed skill directory (e.g. `~/.claude/skills/tradingagents-analysis/scripts/...`), because a sub-agent's working directory is the user's project, not the skill folder. The skill's `SKILL.md` instructs the main agent to resolve that path before spawning analysts.
 
 ```bash
-# Fetch stock OHLCV data (US, A-shares, HK, Crypto)
+# From the skill's scripts/ directory (for manual testing):
 python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31
+
+# Or by absolute path (how the agent invokes them):
+python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31
 
 # Fetch news (company + macro, default last 7 days)
 python scripts/fetch_news.py --symbol AAPL --days 7
@@ -213,7 +237,7 @@ python scripts/fetch_sentiment.py --symbol AAPL --limit 30
 pip install yfinance akshare requests pandas
 ```
 
-Scripts are helpers, not hard dependencies. If a script fails or a data source is unavailable, the agent can fall back to web search, browser tools, or any other available method.
+Scripts are the **primary** data source and are tried first. They are not hard dependencies in the sense that, if a script errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts the script could not provide** — it never skips the scripts outright.
 
 ---
 
