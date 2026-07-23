@@ -20,8 +20,15 @@ except ImportError:
     # akshare 为可选依赖，缺失时 A股 相关接口降级返回不可用
     ak = None
 
+# 默认消息获取上限（降本：原 30 → 15）
+DEFAULT_SENTIMENT_LIMIT = 15
+# 最近消息展示条数（降本：原 15 → 8）
+RECENT_MESSAGE_DISPLAY = 8
+# Reddit 帖子展示条数（降本：原 20 → 8）
+REDDIT_POST_DISPLAY = 8
 
-def fetch_stocktwits(symbol: str, limit: int = 30) -> str:
+
+def fetch_stocktwits(symbol: str, limit: int = DEFAULT_SENTIMENT_LIMIT) -> str:
     """
     获取 StockTwits 情绪数据。
 
@@ -96,7 +103,7 @@ def fetch_stocktwits(symbol: str, limit: int = 30) -> str:
     sections.append(f"- **中性/未标注**: {neutral_count}")
     sections.append("")
     sections.append("## 最近消息\n")
-    sections.extend(recent_messages[:15])
+    sections.extend(recent_messages[:RECENT_MESSAGE_DISPLAY])
 
     return "\n".join(sections)
 
@@ -169,7 +176,7 @@ def fetch_reddit_sentiment(symbol: str, days: int = 7) -> str:
     sections.append(f"搜索范围: r/wallstreetbets, r/stocks, r/investing（最近 {days} 天）\n")
     sections.append("## 热门帖子（按互动量排序）\n")
 
-    for post in all_posts[:20]:
+    for post in all_posts[:REDDIT_POST_DISPLAY]:
         # 格式化每个帖子信息
         title = post["title"][:100]
         score = post["score"]
@@ -238,7 +245,7 @@ def fetch_cn_sentiment(symbol: str) -> str:
     return "\n".join(sections)
 
 
-def fetch_sentiment(symbol: str, limit: int = 30) -> str:
+def fetch_sentiment(symbol: str, limit: int = DEFAULT_SENTIMENT_LIMIT) -> str:
     """
     统一市场情绪数据获取入口。
 
@@ -248,7 +255,7 @@ def fetch_sentiment(symbol: str, limit: int = 30) -> str:
 
     参数:
         symbol: 股票代码
-        limit: StockTwits 消息获取数量上限，默认 30（仅对美股/其他生效）
+        limit: StockTwits 消息获取数量上限，默认 15（仅对美股/其他生效）
 
     返回:
         综合情绪报告字符串
@@ -287,8 +294,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--limit",
         type=int,
-        default=30,
-        help="StockTwits 消息获取数量上限（默认 30）",
+        default=DEFAULT_SENTIMENT_LIMIT,
+        help=f"StockTwits 消息获取数量上限（默认 {DEFAULT_SENTIMENT_LIMIT}）",
     )
     args = parser.parse_args()
 

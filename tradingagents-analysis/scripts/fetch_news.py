@@ -7,6 +7,11 @@
 用于 TradingAgents 多智能体分析流水线的新闻分析阶段。
 
 依赖: pip install yfinance requests akshare
+
+降本增效设计：
+- --limit 默认 8（原 20/源×2 源=40 条），减少注入提示词的条目数。
+- 所有市场摘要统一截断到 200 字（原仅 A 股截断）。
+- 每条精简为「标题 + 来源 + 一行摘要」，去掉冗余链接行。
 """
 
 # 所有注释用中文
@@ -28,34 +33,48 @@ try:
 except ImportError:
     ak = None
 
-# 新闻最大返回条数
-MAX_NEWS_COUNT = 20
+# 新闻默认返回条数（降本：原 20 → 8）
+DEFAULT_NEWS_LIMIT = 8
+# 摘要最大字符数
+MAX_SUMMARY_CHARS = 200
 
 
-def _format_news_item(title: str, source: str, summary: str, link: str = "") -> str:
-    """将单条新闻格式化为 markdown 文本块。"""
-    # 组装 markdown 格式的新闻条目
-    lines = [f"### {title}"]
+def _truncate(text: str, limit: int = MAX_SUMMARY_CHARS) -> str:
+    """将文本截断到指定字符数，超出加省略号。"""
+    if not text:
+        return ""
+    text = str(text).strip()
+    if len(text) > limit:
+        return text[:limit] + "..."
+    return text
+
+
+def _format_news_item(title: str, source: str, summary: str) -> str:
+    """将单条新闻格式化为精简 markdown 文本块（标题 + 来源 + 一行摘要）。"""
+    # 标题
+    lines = [f"- **{title or '无标题'}**"]
+    # 来源与摘要合并到一行，节省 token
+    parts = []
     if source:
-        lines.append(f"- **来源**: {source}")
+        parts.append(f"来源:{source}")
     if summary:
-        lines.append(f"- **摘要**: {summary}")
-    if link:
-        lines.append(f"- **链接**: {link}")
-    lines.append("")
+        parts.append(_truncate(summary))
+    if parts:
+        lines.append("  - " + " | ".join(parts))
     return "\n".join(lines)
 
 
-def fetch_yfinance_news(symbol: str, days: int = 7) -> str:
+def fetch_yfinance_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -> str:
     """
     使用 yfinance 获取个股相关新闻。
 
     通过 yfinance Ticker.news 属性获取新闻列表，
-    返回 markdown 格式字符串，最多返回 20 条。
+    返回 markdown 格式字符串，最多返回 limit 条。
 
     参数:
         symbol: 股票代码，如 "AAPL", "MSFT"
         days: 获取最近多少天的新闻（默认7天）
+        limit: 最多返回条数
     返回:
         markdown 格式新闻字符串或错误信息
     """
@@ -68,11 +87,9 @@ def fetch_yfinance_news(symbol: str, days: int = 7) -> str:
         if not news_list:
             return f"未找到 {symbol} 的相关新闻。"
 
-        # 计算截止日期，用于过滤时间范围
-        cutoff = datetime.now() - timedelta(days=days)
         results = []
 
-        for item in news_list[:MAX_NEWS_COUNT]:
+        for item in news_list[:limit]:
             # yfinance 新闻格式：content 嵌套结构
             content = item.get("content", item)
             title = content.get("title", "无标题")
@@ -81,15 +98,8 @@ def fetch_yfinance_news(symbol: str, days: int = 7) -> str:
             source = publisher.get("displayName", "") if isinstance(publisher, dict) else str(publisher)
             # 提取摘要
             summary = content.get("summary", content.get("description", ""))
-            # 提取链接
-            link = ""
-            click_url = content.get("clickThroughUrl", {})
-            if isinstance(click_url, dict):
-                link = click_url.get("url", "")
-            elif content.get("link"):
-                link = content["link"]
 
-            results.append(_format_news_item(title, source, summary, link))
+            results.append(_format_news_item(title, source, summary))
 
         if not results:
             return f"未找到 {symbol} 在最近 {days} 天内的相关新闻。"
@@ -103,7 +113,7 @@ def fetch_yfinance_news(symbol: str, days: int = 7) -> str:
         return f"错误: 获取 {symbol} 新闻失败 - {e}"
 
 
-def fetch_google_news(query: str, days: int = 7) -> str:
+def fetch_google_news(query: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -> str:
     """
     使用 Google News RSS 获取新闻（无需 API key）。
 
@@ -113,6 +123,7 @@ def fetch_google_news(query: str, days: int = 7) -> str:
     参数:
         query: 搜索关键词，如 "Apple stock", "美联储利率"
         days: 获取最近多少天的新闻（默认7天）
+        limit: 最多返回条数
     返回:
         markdown 格式新闻字符串或错误信息
     """
@@ -135,18 +146,17 @@ def fetch_google_news(query: str, days: int = 7) -> str:
 
         results = []
         # 限制最大返回条数
-        for item in items[:MAX_NEWS_COUNT]:
+        for item in items[:limit]:
             # 从 RSS item 中提取各字段
             title = item.findtext("title", "无标题")
             source = item.findtext("source", "")
-            link = item.findtext("link", "")
             # RSS description 通常包含 HTML，简单截取文本
             description = item.findtext("description", "")
             # 去除可能的 HTML 标签（简单处理）
             if "<" in description:
                 description = description.split("<")[0].strip()
 
-            results.append(_format_news_item(title, source, description, link))
+            results.append(_format_news_item(title, source, description))
 
         if not results:
             return f"Google News 未找到与 \"{query}\" 相关的新闻。"
@@ -163,7 +173,7 @@ def fetch_google_news(query: str, days: int = 7) -> str:
         return f"错误: 解析 Google News RSS 响应失败 - {e}"
 
 
-def fetch_cn_news(symbol: str, days: int = 7) -> str:
+def fetch_cn_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -> str:
     """
     获取A股个股相关新闻。
 
@@ -173,6 +183,7 @@ def fetch_cn_news(symbol: str, days: int = 7) -> str:
     参数:
         symbol: A股代码，纯6位数字如 "600519"
         days: 获取最近多少天的新闻（默认7天）
+        limit: 最多返回条数
     返回:
         markdown 格式新闻字符串或错误信息
     """
@@ -183,15 +194,11 @@ def fetch_cn_news(symbol: str, days: int = 7) -> str:
             if df is not None and not df.empty:
                 results = []
                 # 限制最大条数
-                for _, row in df.head(MAX_NEWS_COUNT).iterrows():
+                for _, row in df.head(limit).iterrows():
                     title = str(row.get("新闻标题", "无标题"))
                     source = str(row.get("文章来源", ""))
                     summary = str(row.get("新闻内容", ""))
-                    # 截断过长的摘要
-                    if len(summary) > 200:
-                        summary = summary[:200] + "..."
-                    link = str(row.get("新闻链接", ""))
-                    results.append(_format_news_item(title, source, summary, link))
+                    results.append(_format_news_item(title, source, summary))
 
                 if results:
                     header = f"## A股 {symbol} 相关新闻（共 {len(results)} 条）\n\n"
@@ -203,10 +210,10 @@ def fetch_cn_news(symbol: str, days: int = 7) -> str:
     # 降级方案：使用 Google News 搜索中文关键词
     # 用股票代码作为搜索词
     query = f"{symbol} A股"
-    return fetch_google_news(query, days)
+    return fetch_google_news(query, days, limit=limit)
 
 
-def fetch_news(symbol: str, days: int = 7) -> str:
+def fetch_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -> str:
     """
     统一新闻获取入口，自动检测市场类型。
 
@@ -217,6 +224,7 @@ def fetch_news(symbol: str, days: int = 7) -> str:
     参数:
         symbol: 股票代码
         days: 获取最近多少天的新闻（默认7天）
+        limit: 每个来源最多返回条数（默认 8）
     返回:
         markdown 格式新闻字符串
     """
@@ -225,18 +233,18 @@ def fetch_news(symbol: str, days: int = 7) -> str:
 
     # 判断是否为A股（6位纯数字）
     if symbol.isdigit() and len(symbol) == 6:
-        return fetch_cn_news(symbol, days)
+        return fetch_cn_news(symbol, days, limit=limit)
 
     # 非A股：组合 yfinance 个股新闻和 Google News 搜索
     sections = []
 
     # 第一部分：yfinance 个股新闻
-    yf_news = fetch_yfinance_news(symbol, days)
+    yf_news = fetch_yfinance_news(symbol, days, limit=limit)
     if not yf_news.startswith("错误"):
         sections.append(yf_news)
 
     # 第二部分：Google News 补充搜索
-    google_news = fetch_google_news(symbol, days)
+    google_news = fetch_google_news(symbol, days, limit=limit)
     if not google_news.startswith("错误"):
         sections.append(google_news)
 
@@ -251,7 +259,7 @@ def fetch_news(symbol: str, days: int = 7) -> str:
 if __name__ == "__main__":
     # 命令行参数解析
     parser = argparse.ArgumentParser(
-        description="新闻数据获取工具 - 支持美股/A股/全球宏观新闻"
+        description="新闻数据获取工具 - 支持美股/A股/全球宏观新闻（默认精简 8 条）"
     )
     parser.add_argument(
         "--symbol",
@@ -265,9 +273,15 @@ if __name__ == "__main__":
         default=7,
         help="获取最近多少天的新闻（默认7天）",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_NEWS_LIMIT,
+        help=f"每个来源最多返回条数（默认 {DEFAULT_NEWS_LIMIT}）",
+    )
 
     args = parser.parse_args()
 
     # 调用统一入口获取新闻并输出
-    result = fetch_news(args.symbol, args.days)
+    result = fetch_news(args.symbol, args.days, limit=args.limit)
     print(result)

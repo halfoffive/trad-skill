@@ -218,34 +218,37 @@ trad-skill/                        # 仓库根目录（元文件 + 安装器）
 
 ## 脚本
 
-Python 辅助脚本（函数式编程，中文注释），用于为分析师子代理获取和格式化数据，永不抛异常——失败时打印错误信息，代理可据此回退。
+Python 辅助脚本（函数式编程，中文注释），用于为分析师子代理**获取、精简并预计算**数据，永不抛异常——失败时打印错误信息，代理可据此回退。默认输出已精简，分析师在小 payload 上推理而非原始数据上做算术。
 
 > 代理必须用技能安装目录内的**绝对路径**来运行这些脚本（如 `~/.claude/skills/tradingagents-analysis/scripts/...`），因为子代理的工作目录是用户项目，而非技能文件夹。`SKILL.md` 已指示主代理在派生子代理前先解析该路径。
 
 ```bash
-# 在技能的 scripts/ 目录内手动测试：
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31
+# 在技能的 scripts/ 目录内手动测试（行情：尾部 OHLCV + 预计算指标 + 可选统计，默认精简）：
+python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
 
 # 或用绝对路径调用（代理实际调用方式）：
-python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31
+python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+
+# 旧行为：整段原始 CSV（token 开销大，慎用）
+python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31 --raw
 
 # 获取行情数据（A股）
-python scripts/fetch_stock_data.py --symbol 600519 --start 2024-01-01 --end 2024-01-31
+python scripts/fetch_stock_data.py --symbol 600519 --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
 
-# 获取新闻（美股）
-python scripts/fetch_news.py --symbol AAPL --days 7
+# 获取新闻（美股，默认 --limit 8，摘要截断）
+python scripts/fetch_news.py --symbol AAPL --days 7 --limit 8
 
 # 获取新闻（A股）
-python scripts/fetch_news.py --symbol 600519 --days 7
+python scripts/fetch_news.py --symbol 600519 --days 7 --limit 8
 
-# 获取基本面（美股）
+# 获取基本面（精简关键指标表 + 公司概况）
 python scripts/fetch_fundamentals.py --symbol AAPL
 
 # 获取基本面（A股）
 python scripts/fetch_fundamentals.py --symbol 600519
 
-# 获取情绪数据（美股）
-python scripts/fetch_sentiment.py --symbol AAPL --limit 30
+# 获取情绪数据（美股，默认 --limit 15）
+python scripts/fetch_sentiment.py --symbol AAPL --limit 15
 
 # 获取情绪数据（A股）
 python scripts/fetch_sentiment.py --symbol 600519

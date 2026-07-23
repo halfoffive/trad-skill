@@ -7,6 +7,12 @@
 用于 TradingAgents 多智能体分析流水线的基本面分析阶段。
 
 依赖: pip install yfinance akshare pandas
+
+降本增效设计：
+- 不再用 to_markdown() 倾倒 4 年×全部行项的宽表（数十行，token 开销大）。
+- 改为输出精挑细选的关键指标表（营收/净利润/EPS/总资产/总负债/
+  经营现金流/自由现金流/毛利率/净利率 + 营收与净利 YoY），约 10 行。
+- 公司概况块保留（已紧凑）。
 """
 
 import argparse
@@ -22,12 +28,107 @@ except ImportError:
     ak = None
 
 
+def _fmt_num(v) -> str:
+    """格式化数值：缺失/N/A 返回 'N/A'，否则四舍五入保留 2 位。"""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return "N/A"
+    try:
+        return round(float(v), 2)
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _yoy(series: pd.Series) -> str:
+    """计算序列最早可得的前后两年同比变化（百分比）。"""
+    try:
+        vals = pd.to_numeric(series, errors="coerce").dropna()
+        if len(vals) < 2:
+            return "N/A"
+        prev = vals.iloc[-2]
+        cur = vals.iloc[-1]
+        if not prev:
+            return "N/A"
+        return f"{round((cur / prev - 1) * 100, 2)}%"
+    except Exception:
+        return "N/A"
+
+
+def _build_us_metric_table(financials: pd.DataFrame, balance: pd.DataFrame,
+                           cashflow: pd.DataFrame) -> str:
+    """
+    从 yfinance 三大报表中抽取关键行项，构建紧凑关键指标表。
+    行项标签取 yfinance 实际返回的英文名。
+    """
+    # 行项映射：显示名 -> yfinance 行标签
+    rows = [
+        ("营收", financials, "Total Revenue"),
+        ("净利润", financials, "Net Income"),
+        ("摊薄EPS", financials, "Diluted EPS"),
+        ("毛利", financials, "Gross Profit"),
+        ("总资产", balance, "Total Assets"),
+        ("总负债", balance, "Total Debt"),
+        ("股东权益", balance, "Stockholders Equity"),
+        ("经营现金流", cashflow, "Operating Cash Flow"),
+        ("自由现金流", cashflow, "Free Cash Flow"),
+    ]
+
+    # 收集所有出现过的年份列（按时间倒序，取最近 4 列）
+    all_cols: list = []
+    seen = set()
+    for _, df, _ in rows:
+        if df is None:
+            continue
+        for c in df.columns:
+            key = str(c)
+            if key not in seen:
+                seen.add(key)
+                all_cols.append(c)
+    # 取最近 4 年并保持倒序
+    all_cols = list(all_cols)[:4]
+
+    if not all_cols:
+        return "> 无可用年度数据\n"
+
+    # 表头：指标 | 年1 | 年2 | ... | YoY
+    year_labels = []
+    for c in all_cols:
+        try:
+            year_labels.append(str(c).split(" ")[0][:10])
+        except Exception:
+            year_labels.append(str(c)[:10])
+
+    lines = ["| 指标 | " + " | ".join(year_labels) + " | YoY(营收/净利) |"]
+    lines.append("|" + "---|" * (len(year_labels) + 2))
+
+    # 取行项的值
+    def _row_vals(display: str, df, label: str) -> list:
+        if df is None or label not in df.index:
+            return [display] + ["N/A"] * len(all_cols) + [""]
+        series = df.loc[label]
+        vals = []
+        for c in all_cols:
+            if c in series.index:
+                vals.append(_fmt_num(series[c]))
+            else:
+                vals.append("N/A")
+        # 营收与净利附加 YoY
+        yoy = ""
+        if display == "营收" or display == "净利润":
+            yoy = _yoy(series)
+        return [display] + vals + [yoy]
+
+    for display, df, label in rows:
+        lines.append("| " + " | ".join(str(x) for x in _row_vals(display, df, label)) + " |")
+
+    return "\n".join(lines) + "\n"
+
+
 def fetch_us_fundamentals(symbol: str) -> str:
     """
     获取美股基本面数据。
 
-    使用 yfinance 获取公司概况、利润表、资产负债表和现金流量表，
-    返回 markdown 格式的综合报告。
+    使用 yfinance 获取公司概况与三大报表，
+    返回精简关键指标 markdown 报告（替代整表倾倒）。
 
     参数:
         symbol: 美股股票代码，如 AAPL, MSFT
@@ -37,83 +138,58 @@ def fetch_us_fundamentals(symbol: str) -> str:
     """
     # 初始化报告内容
     sections: list[str] = []
-    sections.append(f"# {symbol} 基本面分析报告\n")
+    sections.append(f"# {symbol} 基本面（精简）\n")
 
     # 创建 Ticker 对象
     ticker = yf.Ticker(symbol)
 
-    # 获取公司概况信息
+    # 获取公司概况信息（紧凑）
     try:
         info = ticker.info
         sections.append("## 公司概况\n")
         # 提取关键字段，缺失时用 N/A 占位
-        company_name = info.get("longName", "N/A")
-        sector = info.get("sector", "N/A")
-        industry = info.get("industry", "N/A")
-        market_cap = info.get("marketCap", "N/A")
-        trailing_pe = info.get("trailingPE", "N/A")
-        price_to_book = info.get("priceToBook", "N/A")
-        roe = info.get("returnOnEquity", "N/A")
-        revenue = info.get("totalRevenue", "N/A")
-        profit_margin = info.get("profitMargins", "N/A")
-
-        sections.append(f"- **公司名称**: {company_name}")
-        sections.append(f"- **行业**: {sector} / {industry}")
-        sections.append(f"- **市值**: {market_cap}")
-        sections.append(f"- **市盈率 (PE)**: {trailing_pe}")
-        sections.append(f"- **市净率 (PB)**: {price_to_book}")
-        sections.append(f"- **净资产收益率 (ROE)**: {roe}")
-        sections.append(f"- **总营收**: {revenue}")
-        sections.append(f"- **利润率**: {profit_margin}")
+        fields = {
+            "公司名称": info.get("longName", "N/A"),
+            "行业": f"{info.get('sector', 'N/A')} / {info.get('industry', 'N/A')}",
+            "市值": info.get("marketCap", "N/A"),
+            "市盈率(PE)": info.get("trailingPE", "N/A"),
+            "市净率(PB)": info.get("priceToBook", "N/A"),
+            "ROE": info.get("returnOnEquity", "N/A"),
+            "总营收": info.get("totalRevenue", "N/A"),
+            "利润率": info.get("profitMargins", "N/A"),
+        }
+        for k, v in fields.items():
+            sections.append(f"- **{k}**: {v}")
         sections.append("")
     except Exception as e:
         # 公司概况获取失败不影响其他数据
         sections.append(f"## 公司概况\n\n> 获取失败: {e}\n")
 
-    # 获取利润表数据
+    # 取三大报表（不整表倾倒，只用于抽关键行项）
     try:
         financials = ticker.financials
-        if financials is not None and not financials.empty:
-            sections.append("## 利润表（最近年度）\n")
-            # 取最近4列数据
-            recent = financials.iloc[:, :4]
-            sections.append(recent.to_markdown())
-            sections.append("")
-        else:
-            sections.append("## 利润表\n\n> 无数据\n")
-    except Exception as e:
-        # 利润表获取失败不影响其他数据
-        sections.append(f"## 利润表\n\n> 获取失败: {e}\n")
-
-    # 获取资产负债表数据
+    except Exception:
+        financials = None
     try:
         balance = ticker.balance_sheet
-        if balance is not None and not balance.empty:
-            sections.append("## 资产负债表（最近年度）\n")
-            # 取最近4列数据
-            recent = balance.iloc[:, :4]
-            sections.append(recent.to_markdown())
-            sections.append("")
-        else:
-            sections.append("## 资产负债表\n\n> 无数据\n")
-    except Exception as e:
-        # 资产负债表获取失败不影响其他数据
-        sections.append(f"## 资产负债表\n\n> 获取失败: {e}\n")
-
-    # 获取现金流量表数据
+    except Exception:
+        balance = None
     try:
         cashflow = ticker.cashflow
-        if cashflow is not None and not cashflow.empty:
-            sections.append("## 现金流量表（最近年度）\n")
-            # 取最近4列数据
-            recent = cashflow.iloc[:, :4]
-            sections.append(recent.to_markdown())
-            sections.append("")
+    except Exception:
+        cashflow = None
+
+    # 关键指标表
+    try:
+        if (financials is not None and not financials.empty) or \
+           (balance is not None and not balance.empty) or \
+           (cashflow is not None and not cashflow.empty):
+            sections.append("## 关键财务指标（最近年度，脚本抽取）\n")
+            sections.append(_build_us_metric_table(financials, balance, cashflow))
         else:
-            sections.append("## 现金流量表\n\n> 无数据\n")
+            sections.append("## 关键财务指标\n\n> 无数据\n")
     except Exception as e:
-        # 现金流量表获取失败不影响其他数据
-        sections.append(f"## 现金流量表\n\n> 获取失败: {e}\n")
+        sections.append(f"## 关键财务指标\n\n> 抽取失败: {e}\n")
 
     return "\n".join(sections)
 
@@ -122,7 +198,7 @@ def fetch_cn_fundamentals(symbol: str) -> str:
     """
     获取A股基本面数据。
 
-    使用 akshare 获取财务分析指标和个股基本信息，
+    使用 akshare 获取财务分析指标和个股基本信息（精简输出），
     如果 akshare 失败则降级使用 yfinance（加 .SS/.SZ 后缀）。
 
     参数:
@@ -133,19 +209,19 @@ def fetch_cn_fundamentals(symbol: str) -> str:
     """
     # 初始化报告内容
     sections: list[str] = []
-    sections.append(f"# {symbol} A股基本面分析报告\n")
+    sections.append(f"# {symbol} A股基本面（精简）\n")
 
     # 标记是否有任何数据获取成功
     has_data = False
 
-    # 获取财务分析指标
+    # 获取财务分析指标（只取关键列、最近若干行，避免宽表倾倒）
     try:
         df_indicator = ak.stock_financial_analysis_indicator(symbol=symbol)
         if df_indicator is not None and not df_indicator.empty:
             has_data = True
-            sections.append("## 财务分析指标\n")
-            # 取最近几行数据展示
-            recent = df_indicator.head(8)
+            sections.append("## 财务分析指标（最近 4 期，精简）\n")
+            # 取最近 4 行，且最多 6 列
+            recent = df_indicator.tail(4).iloc[:, :6]
             sections.append(recent.to_markdown(index=False))
             sections.append("")
         else:
@@ -159,8 +235,10 @@ def fetch_cn_fundamentals(symbol: str) -> str:
         df_info = ak.stock_individual_info_em(symbol=symbol)
         if df_info is not None and not df_info.empty:
             has_data = True
-            sections.append("## 个股基本信息\n")
-            sections.append(df_info.to_markdown(index=False))
+            sections.append("## 个股基本信息（精简）\n")
+            # 只取前 10 行避免长表
+            recent = df_info.head(10)
+            sections.append(recent.to_markdown(index=False))
             sections.append("")
         else:
             sections.append("## 个股基本信息\n\n> 无数据\n")
@@ -221,9 +299,9 @@ def fetch_fundamentals(symbol: str) -> str:
 
 
 if __name__ == "__main__":
-    # 命令行参数解析
+    # 命行参数解析
     parser = argparse.ArgumentParser(
-        description="基本面数据获取工具 - 支持美股和A股"
+        description="基本面数据获取工具 - 支持美股和A股（默认精简关键指标表）"
     )
     parser.add_argument(
         "--symbol",
