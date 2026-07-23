@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-07-23
+
+### Changed — Deep token-cost reduction (let the LLM use python scripts)
+
+- **Indicator computation moved into the script.** `fetch_stock_data.py` now pre-computes SMA(50/200), EMA(10), MACD/signal/hist, RSI(14), Bollinger(20,2), ATR(14), VWMA(20), MFI(14) with pure pandas (no new deps) and prints a compact indicator snapshot (latest values + trend signals: golden/death cross, overbought/oversold, band position). The Market Analyst now **interprets** pre-computed values instead of doing arithmetic over a 250-row CSV. Resolves the SKILL.md §6 "Market Analyst computes indicators" cost center.
+- **Data output compacted across all scripts** to shrink the payloads that enter analyst reports and then get re-injected downstream:
+  - `fetch_stock_data.py`: default output is OHLCV **tail** (default `--tail 30`, was full range) + indicators + optional `--stats`; `--raw` preserves the legacy full-range CSV.
+  - `fetch_fundamentals.py`: curated **compact key-metrics table** (revenue, net income, EPS, FCF, debt, equity, OCF, margins + YoY) replaces `to_markdown()` dumps of all 4-year × 3-statement line items.
+  - `fetch_news.py`: default `--limit 8` per source (was 20×2=40); all summaries truncated to 200 chars (was US-only); per-item format slimmed to title + source + one-line summary.
+  - `fetch_sentiment.py`: default `--limit 15` (was 30); displayed messages 15→8; Reddit posts 20→8.
+- **SKILL.md re-injection discipline (biggest lever).** Analyst reports must be concise (≤~400 words) and lead with a `## Key Signals` digest (5–8 bullets). The Stage 2 & 5 debate prompts now bind the four analyst reports to their **Key Signals digests** instead of full bodies (the verbatim prompt bodies are unchanged — only what is bound to the `{*_report}` variables changes). The Stage 6 Portfolio Manager still receives full reports + transcript once.
+- `SKILL.md §4` spawn template now tells sub-agents the python script IS the data source / "verified snapshot" and not to attempt nonexistent tool names (`get_stock_data` / `get_indicators` / `get_verified_market_snapshot`), cutting wasted tool-call round-trips.
+- `SKILL.md §7` final reasoning capped to 3–4 concise paragraphs (cite, don't re-narrate).
+- `references/indicators.md`: notes that indicators are pre-computed by the script; the "Verified Market Snapshot" section now points at the script output instead of the nonexistent `get_verified_market_snapshot` tool.
+
+### Added
+- `fetch_stock_data.py`: `--tail`, `--indicators` / `--no-indicators`, `--stats`, `--raw` flags; `compute_indicators()` and `compute_stats()` helpers; `build_compact_report()` default entry; `_normalize_ohlcv()` shared normalizer.
+- `fetch_fundamentals.py`: `_build_us_metric_table()` curated key-metrics extractor with YoY.
+- `fetch_news.py`: `_truncate()` helper; `--limit` flag (default 8); slim `_format_news_item()`.
+
 ## [1.1.0] - 2026-07-23
 
 ### Added

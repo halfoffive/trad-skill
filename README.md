@@ -210,26 +210,36 @@ See [references/data-sources.md](references/data-sources.md) for the full catalo
 
 ## Scripts
 
-Python helper scripts for data fetching. Functional style, no class definitions. Each script outputs formatted text suitable for LLM prompt injection and never raises — on failure it prints an error message the agent can fall back from.
+Python helper scripts for data fetching, **compaction, and pre-computation**. Functional style, no class definitions. Each script outputs compact formatted text suitable for LLM prompt injection and never raises — on failure it prints an error message the agent can fall back from. By default the outputs are already trimmed so the analyst reasons over a small payload instead of raw data.
 
 > The agent must run these scripts by their **absolute path** inside the installed skill directory (e.g. `~/.claude/skills/tradingagents-analysis/scripts/...`), because a sub-agent's working directory is the user's project, not the skill folder. The skill's `SKILL.md` instructs the main agent to resolve that path before spawning analysts.
 
 ```bash
-# From the skill's scripts/ directory (for manual testing):
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31
+# Stock data: OHLCV tail + pre-computed indicators + optional stats (default; compact)
+python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
 
 # Or by absolute path (how the agent invokes them):
-python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31
+python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
 
-# Fetch news (company + macro, default last 7 days)
-python scripts/fetch_news.py --symbol AAPL --days 7
+# Legacy full-range raw CSV (token-heavy, avoid)
+python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31 --raw
 
-# Fetch fundamentals (income statement, balance sheet, cashflow)
+# Fetch news (default --limit 8 per source, summaries truncated)
+python scripts/fetch_news.py --symbol AAPL --days 7 --limit 8
+
+# Fetch fundamentals (compact key-metrics table + company profile)
 python scripts/fetch_fundamentals.py --symbol AAPL
 
-# Fetch sentiment (StockTwits, Reddit, headline analysis)
-python scripts/fetch_sentiment.py --symbol AAPL --limit 30
+# Fetch sentiment (default --limit 15)
+python scripts/fetch_sentiment.py --symbol AAPL --limit 15
 ```
+
+| Script | Defaults (compact) | Expand flags |
+|---|---|---|
+| `fetch_stock_data.py` | `--tail 30` + `--indicators` on | `--stats`, `--raw` |
+| `fetch_news.py` | `--limit 8`, 200-char summaries | `--limit N`, `--days N` |
+| `fetch_fundamentals.py` | compact key-metrics table | — |
+| `fetch_sentiment.py` | `--limit 15`, 8 messages/posts shown | `--limit N` |
 
 ### Dependencies
 

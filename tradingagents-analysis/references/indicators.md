@@ -3,11 +3,13 @@
 Indicators available to the Market Analyst, organized by category.
 The Market Analyst selects up to 8 complementary indicators per analysis.
 
+> **These indicators are pre-computed by the script.** Run `python "<skill>/scripts/fetch_stock_data.py" --symbol <ticker> --start <s> --end <e>` and the output already contains a compact indicator snapshot (latest values + trend signals). The Market Analyst **interprets** these pre-computed values — it does not call a separate tool or recompute them by hand. There is no `get_stock_data` / `get_indicators` tool; the python script is the data source.
+
 ## Selection Guidelines
 - Select indicators that provide diverse and complementary information
 - Avoid redundancy (e.g., do not select both RSI and StochRSI)
 - Explain why each indicator is suitable for the given market context
-- Always call get_stock_data first to retrieve the CSV needed for indicators
+- The script fetches the OHLCV and computes the indicators in one call
 
 ## Moving Averages
 
@@ -86,4 +88,4 @@ A momentum indicator that uses both price and volume to measure buying and selli
 
 ## Verified Market Snapshot
 
-Before writing the final report, the Market Analyst calls `get_verified_market_snapshot` for the ticker and current date. This is the source of truth for any exact OHLCV, price-level, or indicator-value claim. If another tool's output conflicts with the verified snapshot, the discrepancy is flagged rather than inventing a reconciled number.
+The `fetch_stock_data.py` script output is the source of truth for any exact OHLCV, price-level, or indicator-value claim. If a web-search fallback conflicts with the script output, flag the discrepancy rather than inventing a reconciled number. Do not claim historical validation, support/resistance bounces, or exact percentage moves unless they are directly supported by the script output with concrete dates and prices.

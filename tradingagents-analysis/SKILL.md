@@ -52,7 +52,7 @@ Four sub-agents run simultaneously, each producing a structured report:
 
 | Analyst | Focus | Key inputs |
 |---|---|---|
-| **Market Analyst** | Technical indicators: SMA, EMA, MACD, RSI, Bollinger Bands, ATR, VWMA | OHLCV price data via `scripts/fetch_stock_data.py` |
+| **Market Analyst** | Technical indicators: SMA, EMA, MACD, RSI, Bollinger Bands, ATR, VWMA, MFI | OHLCV + **pre-computed indicators** via `scripts/fetch_stock_data.py` (analyst interprets, does not recompute) |
 | **Sentiment Analyst** | Social and headline sentiment → composite score | StockTwits, Reddit, news headlines via `scripts/fetch_sentiment.py` |
 | **News Analyst** | Company news, global macro, FRED indicators, prediction markets | News feeds via `scripts/fetch_news.py` |
 | **Fundamentals Analyst** | Financial statements: balance sheet, cashflow, income statement | Financials via `scripts/fetch_fundamentals.py` |
@@ -122,10 +122,16 @@ task(subagent_type="general", run_in_background=true,
      prompt="<role prompt contents>\n\nAnalyze {ticker} as of {date}.\n" +
             "Gather data FIRST by running the script, then write your report.\n" +
             "Run: python \"{SCRIPTS_DIR}/fetch_stock_data.py\" --symbol {ticker} --start {start} --end {end}\n" +
+            "The script output is ALREADY compact and (for market data) pre-computes indicators — " +
+            "it is your data source AND your verified snapshot; do NOT call get_stock_data / " +
+            "get_indicators / get_verified_market_snapshot or any other tool name, they do not exist. " +
+            "Do NOT copy raw script output into your report — cite the key numbers only. " +
             "If the script errors, fall back to web search / browser tools only for the parts it could not provide.")
 ```
 
 Substitute the correct script per analyst (see Section 6). **Scripts are the primary data source** — the analyst must run its assigned script before writing its report; web search / browser tools are a fallback only when a script fails or returns no data for a given source.
+
+> **Token discipline.** Each analyst report must be **concise (target ≤ 400 words)** and structured as: a `## Key Signals` block of 5–8 actionable bullets at the top, a short evidence section referencing the script's key numbers (not reproducing the raw output), and one summary table. The `## Key Signals` block is what downstream stages consume — keep it self-contained. This overrides any "very detailed" phrasing in the verbatim role prompt: be evidence-dense, not verbose.
 
 Wait for all four analysts to complete before proceeding.
 
@@ -140,6 +146,11 @@ Stages 2–6 run **in the main context**, one after another. For each stage:
 
 Debate stages (2 and 5) loop for the configured number of rounds. Each round, the next speaker receives the full transcript of prior rounds.
 
+> **Re-injection discipline (biggest token lever).** The verbatim role prompts bind the four analyst reports via template variables (`{market_research_report}`, `{sentiment_report}`, `{news_report}`, `{fundamentals_report}`). To avoid re-sending four full reports on every debate round:
+> - **Stages 2 & 5** (debates): bind those four variables to each report's **`## Key Signals` digest only**, not the full body. The `{history}` variable still carries the running debate transcript (naturally paragraph-sized, not full reports).
+> - **Stage 6** (Portfolio Manager): bind the **full reports + full transcript** once — the final synthesis deserves complete context, and it happens a single time.
+> Extract the `## Key Signals` block from each analyst report before feeding it into the debate prompts; keep the full reports aside for the Portfolio Manager.
+
 ---
 
 ## 5. Stage-by-Stage Instructions
@@ -148,8 +159,8 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 - **Data**: each analyst runs its assigned script (see Section 6).
 - **Prompt**: `references/prompts/{role}_analyst.md`.
-- **Output**: a structured markdown report with findings, data tables, and a summary assessment.
-- **Handoff**: collect all four reports into a single context block for Stage 2.
+- **Output**: a **concise** structured markdown report (≤ ~400 words) leading with a `## Key Signals` digest (5–8 bullets), followed by a short evidence section and one summary table. Do not reproduce the script's raw output — cite key numbers only.
+- **Handoff**: keep each full report aside for the Portfolio Manager; extract the four `## Key Signals` digests into one context block for the Stage 2 & 5 debates (see "Re-injection discipline" above).
 
 ### Stage 2: Research Debate
 
@@ -189,14 +200,14 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 ## 6. Data Gathering
 
-Helper scripts live in this skill's `scripts/` directory. They fetch and format data for the analyst sub-agents. **Run them with their absolute path** (see the "Resolve the skill directory first" note in Section 4); each script prints a formatted string (CSV or markdown) ready for prompt injection and never raises — on failure it prints an error message the analyst can fall back from.
+Helper scripts live in this skill's `scripts/` directory. They fetch, **compact, and pre-compute** data for the analyst sub-agents — so the analyst interprets a small payload instead of burning tokens on raw data and arithmetic. **Run them with their absolute path** (see the "Resolve the skill directory first" note in Section 4); each script prints a formatted string (CSV or markdown) ready for prompt injection and never raises — on failure it prints an error message the analyst can fall back from.
 
 | Script | Purpose | Invocation |
 |---|---|---|
-| `fetch_stock_data.py` | OHLCV price history (raw). The Market Analyst computes indicators (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA) from this OHLCV per `references/indicators.md`. | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2024-01-01 --end 2024-01-31` |
-| `fetch_news.py` | Company and macro news (US: yfinance + Google News RSS; A股: 东方财富/akshare) | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7` |
-| `fetch_fundamentals.py` | Financial statements: income, balance sheet, cashflow | `python "<skill>/scripts/fetch_fundamentals.py" --symbol AAPL` |
-| `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit, headline analysis (A股: 机构参与度/akshare) | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 30` |
+| `fetch_stock_data.py` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). Use `--stats` for return/volatility/52w range; `--raw` for the legacy full-range CSV (token-heavy, avoid). | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats` |
+| `fetch_news.py` | Company and macro news (US: yfinance + Google News RSS; A股: 东方财富/akshare). Default `--limit 8` per source; all summaries truncated. | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7 --limit 8` |
+| `fetch_fundamentals.py` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `python "<skill>/scripts/fetch_fundamentals.py" --symbol AAPL` |
+| `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit, headline analysis (A股: 机构参与度/akshare). Default `--limit 15`; message/post displays trimmed. | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 15` |
 
 For the full catalog of data sources, APIs, and fallback strategies, see `references/data-sources.md`.
 
@@ -212,7 +223,7 @@ The final Portfolio Manager decision must include all of the following:
 
 - **Rating**: exactly one of `Buy` / `Overweight` / `Hold` / `Underweight` / `Sell`.
 - **Confidence**: `low` / `medium` / `high`.
-- **Reasoning**: multi-paragraph synthesis drawing on all analyst reports, the research debate, and the risk debate. Explain why the rating was chosen and what evidence supports it.
+- **Reasoning**: a **concise 3–4 paragraph** synthesis drawing on all analyst reports, the research debate, and the risk debate. Explain why the rating was chosen and what evidence supports it — cite specific data points, do not re-narrate the full pipeline.
 - **Key Risks**: bullet list of the most significant downside scenarios.
 - **Catalysts**: bullet list of events or conditions that could move the thesis.
 
