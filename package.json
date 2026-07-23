@@ -1,0 +1,30 @@
+{
+  "name": "trad-skill",
+  "version": "1.1.0",
+  "description": "Installable TradingAgents multi-agent stock-analysis skill (Claude Code / OpenCode)",
+  "license": "Apache-2.0",
+  "repository": "github:halfoffive/trad-skill",
+  "homepage": "https://github.com/halfoffive/trad-skill",
+  "bin": {
+    "trad-skill": "install.mjs"
+  },
+  "files": [
+    "install.mjs",
+    "tradingagents-analysis/",
+    "README.md",
+    "README_CN.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.7"
+  },
+  "keywords": [
+    "skill",
+    "claude-code",
+    "opencode",
+    "tradingagents",
+    "stock-analysis",
+    "multi-agent"
+  ]
+}

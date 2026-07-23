@@ -22,7 +22,27 @@ This skill replicates the TradingAgents multi-agent pipeline, drawing on the ope
 
 ---
 
-## 2. Pipeline Architecture
+## 2. Before You Start — Confirm the Target
+
+**Do not spawn any sub-agent until the analysis target is confirmed.**
+
+1. If the user has **not** named a specific ticker/symbol, **ask them first**: "Which ticker should I analyze?" Give market-aware examples (e.g. `AAPL`, `600519` / `000858`, `0700.HK`, `BTC-USD`). Wait for the answer before proceeding.
+2. Optionally confirm — or let the defaults apply — the following:
+
+   | Parameter | Default | Notes |
+   |---|---|---|
+   | Trade date | today | The "as of" date for the analysis |
+   | `max_debate_rounds` | 1 | 1–3 bull/bear exchanges |
+   | `max_risk_discuss_rounds` | 1 | 1–3 risk-debate exchanges |
+   | `output_language` | match the user's language | English or 中文 |
+   | `market` | auto-detect from ticker | `.SS`/`.SZ`→A股, `.HK`→港股, `-USD`→Crypto, else US |
+
+3. The user may override any default inline (e.g. "用中文输出", "run 3 debate rounds"). Honor stated preferences.
+4. Only once a ticker is confirmed, proceed to the pipeline below.
+
+---
+
+## 3. Pipeline Architecture
 
 The analysis runs as a six-stage pipeline. Stages 1 uses parallel sub-agents; stages 2–6 run sequentially in the main context.
 
@@ -67,7 +87,7 @@ Reviews the trader's proposal and all risk perspectives. Issues the **final deci
 
 ---
 
-## 3. Sub-Agent Orchestration
+## 4. Sub-Agent Orchestration
 
 ### Spawning the Analyst Team
 
@@ -79,14 +99,33 @@ Spawn **four parallel sub-agents**, one per analyst role. Each sub-agent receive
    - `references/prompts/sentiment_analyst.md`
    - `references/prompts/news_analyst.md`
    - `references/prompts/fundamentals_analyst.md`
-3. Access to the relevant **data script** in `scripts/` (see Section 5).
+3. The **absolute path** to its data script (see Section 6).
+
+### Resolve the skill directory first (important)
+
+A sub-agent's working directory is the user's project, **not** this skill's folder, so a relative path like `scripts/fetch_stock_data.py` will not resolve. Before spawning anything, **resolve the absolute path to this skill's `scripts/` directory** and embed it in each sub-agent prompt.
+
+Locate the skill directory — it is typically one of:
+
+- `~/.claude/skills/tradingagents-analysis` (Claude Code, user-level)
+- `~/.agents/skills/tradingagents-analysis` (generic / OpenCode user-level)
+- `.claude/skills/tradingagents-analysis` or `.opencode/skills/tradingagents-analysis` (project-level)
+
+Set `SCRIPTS_DIR` to that `<skill-dir>/scripts` and use it in every spawn.
+
+### Spawn template
 
 Use background task spawning for parallelism:
 
 ```
 task(subagent_type="general", run_in_background=true,
-     prompt="<role prompt contents>\n\nAnalyze {ticker} as of {date}.\nUse scripts/{script}.py to gather data.")
+     prompt="<role prompt contents>\n\nAnalyze {ticker} as of {date}.\n" +
+            "Gather data FIRST by running the script, then write your report.\n" +
+            "Run: python \"{SCRIPTS_DIR}/fetch_stock_data.py\" --symbol {ticker} --start {start} --end {end}\n" +
+            "If the script errors, fall back to web search / browser tools only for the parts it could not provide.")
 ```
+
+Substitute the correct script per analyst (see Section 6). **Scripts are the primary data source** — the analyst must run its assigned script before writing its report; web search / browser tools are a fallback only when a script fails or returns no data for a given source.
 
 Wait for all four analysts to complete before proceeding.
 
@@ -103,11 +142,11 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 ---
 
-## 4. Stage-by-Stage Instructions
+## 5. Stage-by-Stage Instructions
 
 ### Stage 1: Analyst Team
 
-- **Data**: each analyst runs its assigned script (see Section 5).
+- **Data**: each analyst runs its assigned script (see Section 6).
 - **Prompt**: `references/prompts/{role}_analyst.md`.
 - **Output**: a structured markdown report with findings, data tables, and a summary assessment.
 - **Handoff**: collect all four reports into a single context block for Stage 2.
@@ -136,7 +175,7 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 ### Stage 5: Risk Debate
 
 - **Data**: the transaction proposal plus all analyst reports.
-- **Prompts**: `references/prompts/aggressive_analyst.md`, `references/prompts/conservative_analyst.md`, `references/prompts/neutral_analyst.md`.
+- **Prompts**: `references/prompts/aggressive_risk.md`, `references/prompts/conservative_risk.md`, `references/prompts/neutral_risk.md`.
 - **Output**: alternating risk perspectives for `max_risk_discuss_rounds` rounds.
 - **Handoff**: the risk transcript goes to the Portfolio Manager.
 
@@ -144,30 +183,30 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 - **Data**: everything. All analyst reports, the debate, the plan, the proposal, and the risk transcript.
 - **Prompt**: `references/prompts/portfolio_manager.md`.
-- **Output**: the final decision in the format described in Section 6.
+- **Output**: the final decision in the format described in Section 7.
 
 ---
 
-## 5. Data Gathering
+## 6. Data Gathering
 
-Helper scripts live in `scripts/`. They fetch and format data for the analyst sub-agents.
+Helper scripts live in this skill's `scripts/` directory. They fetch and format data for the analyst sub-agents. **Run them with their absolute path** (see the "Resolve the skill directory first" note in Section 4); each script prints a formatted string (CSV or markdown) ready for prompt injection and never raises — on failure it prints an error message the analyst can fall back from.
 
-| Script | Purpose |
-|---|---|
-| `scripts/fetch_stock_data.py` | OHLCV price history, technical indicator computation |
-| `scripts/fetch_news.py` | Company news, macro news, FRED economic indicators |
-| `scripts/fetch_fundamentals.py` | Financial statements: income, balance sheet, cashflow |
-| `scripts/fetch_sentiment.py` | Social sentiment from StockTwits, Reddit, headline analysis |
+| Script | Purpose | Invocation |
+|---|---|---|
+| `fetch_stock_data.py` | OHLCV price history (raw). The Market Analyst computes indicators (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA) from this OHLCV per `references/indicators.md`. | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2024-01-01 --end 2024-01-31` |
+| `fetch_news.py` | Company and macro news (US: yfinance + Google News RSS; A股: 东方财富/akshare) | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7` |
+| `fetch_fundamentals.py` | Financial statements: income, balance sheet, cashflow | `python "<skill>/scripts/fetch_fundamentals.py" --symbol AAPL` |
+| `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit, headline analysis (A股: 机构参与度/akshare) | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 30` |
 
 For the full catalog of data sources, APIs, and fallback strategies, see `references/data-sources.md`.
 
 For technical indicator definitions and interpretation guidance, see `references/indicators.md`.
 
-> Scripts are helpers, not hard dependencies. If a script fails or a data source is unavailable, the agent can fall back to web search, browser tools, or any other available method to gather the needed data.
+> Scripts are the **primary** data source and must be tried first. They are not hard dependencies in the sense that, if a script errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts the script could not provide** — never skip the scripts outright.
 
 ---
 
-## 6. Output Format
+## 7. Output Format
 
 The final Portfolio Manager decision must include all of the following:
 
@@ -191,7 +230,7 @@ Close with a summary table:
 
 ---
 
-## 7. Configuration
+## 8. Configuration
 
 | Parameter | Range | Default | Description |
 |---|---|---|---|
@@ -211,7 +250,7 @@ The user can override any of these by stating preferences explicitly (e.g., "用
 
 ---
 
-## 8. Disclaimer
+## 9. Disclaimer
 
 > **This skill is for RESEARCH AND EDUCATION ONLY.**
 >
@@ -223,7 +262,7 @@ The user can override any of these by stating preferences explicitly (e.g., "用
 
 ---
 
-## 9. Credits
+## 10. Credits
 
 - Based on [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) (Apache 2.0).
 - China market enhancements from [hsliuping/TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN).

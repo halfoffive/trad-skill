@@ -33,11 +33,21 @@
 
 ## 安装
 
-### 通过 npx skill 安装（推荐）
+### 通过 npx 安装（推荐）
 
 ```bash
-npx skill add halfoffive/trad-skill/tradingagents-analysis
+npx halfoffive/trad-skill
 ```
+
+这会下载并运行一个零依赖的微型安装器，把 `tradingagents-analysis/` 技能复制到 `~/.claude/skills/tradingagents-analysis`（Claude Code）。安装器会打印后续步骤。可选参数：
+
+```bash
+npx halfoffive/trad-skill --agent agents      # 安装到 ~/.agents/skills
+npx halfoffive/trad-skill --agent opencode   # 安装到 ~/.opencode/skills
+npx halfoffive/trad-skill --dir <path>       # 安装到自定义技能目录
+```
+
+> 若 `npx halfoffive/trad-skill` 在你的 npx 版本上没有自动运行安装器，请使用 `npx -p halfoffive/trad-skill trad-skill`。
 
 ### 让 AI 代理帮你安装
 
@@ -48,10 +58,13 @@ npx skill add halfoffive/trad-skill/tradingagents-analysis
 将技能子目录复制到 AI 代理的技能文件夹：
 
 ```bash
-# Claude Code / OpenCode 用户级
+# Claude Code（用户级）
+cp -r tradingagents-analysis ~/.claude/skills/tradingagents-analysis
+
+# OpenCode / 通用（用户级）
 cp -r tradingagents-analysis ~/.agents/skills/tradingagents-analysis
 
-# OpenCode 项目级
+# OpenCode（项目级）
 cp -r tradingagents-analysis .opencode/skills/tradingagents-analysis
 ```
 
@@ -139,35 +152,40 @@ cp -r tradingagents-analysis .opencode/skills/tradingagents-analysis
 ## 项目结构
 
 ```
-trad-skill/
-├── SKILL.md                    # 核心技能指令文件
-├── references/
-│   ├── prompts/                # 14个智能体角色提示词
-│   │   ├── market_analyst.md       # 市场分析师
-│   │   ├── sentiment_analyst.md    # 情绪分析师
-│   │   ├── news_analyst.md         # 新闻分析师
-│   │   ├── fundamentals_analyst.md # 基本面分析师
-│   │   ├── bull_researcher.md      # 看多研究员
-│   │   ├── bear_researcher.md      # 看空研究员
-│   │   ├── research_manager.md     # 研究主管
-│   │   ├── trader.md               # 交易员
-│   │   ├── aggressive_risk.md      # 激进风控
-│   │   ├── conservative_risk.md    # 保守风控
-│   │   ├── neutral_risk.md         # 中性风控
-│   │   ├── portfolio_manager.md    # 投资组合经理
-│   │   ├── china_market_analyst.md # 中国市场分析师
-│   │   ├── cn_news_analyst.md      # 中文新闻分析师
-│   │   └── README.md               # 提示词索引
-│   ├── data-sources.md         # 数据源目录（美股+A股+港股）
-│   └── indicators.md           # 技术指标参考
-├── scripts/
-│   ├── fetch_stock_data.py     # 行情数据获取
-│   ├── fetch_news.py           # 新闻数据获取
-│   ├── fetch_fundamentals.py   # 基本面数据获取
-│   └── fetch_sentiment.py      # 情绪数据获取
-├── README.md                   # 英文文档
-├── README_CN.md                # 本文件（中文文档）
-└── LICENSE                     # Apache 2.0 许可证
+trad-skill/                        # 仓库根目录（元文件 + 安装器）
+├── package.json                  # npx 入口（name: trad-skill）
+├── install.mjs                   # 零依赖安装器（把技能复制到 agent 的 skills 目录）
+├── README.md                      # 英文文档
+├── README_CN.md                   # 本文件（中文文档）
+├── CHANGELOG.md                   # 版本历史
+├── AGENTS.md                      # AI 代理接入文档
+└── LICENSE                        # Apache 2.0 许可证
+└── tradingagents-analysis/        # 可安装的技能
+    ├── SKILL.md                   # 核心技能指令文件
+    ├── references/
+    │   ├── prompts/               # 14个智能体角色提示词
+    │   │   ├── market_analyst.md       # 市场分析师
+    │   │   ├── sentiment_analyst.md    # 情绪分析师
+    │   │   ├── news_analyst.md         # 新闻分析师
+    │   │   ├── fundamentals_analyst.md # 基本面分析师
+    │   │   ├── bull_researcher.md      # 看多研究员
+    │   │   ├── bear_researcher.md      # 看空研究员
+    │   │   ├── research_manager.md     # 研究主管
+    │   │   ├── trader.md               # 交易员
+    │   │   ├── aggressive_risk.md      # 激进风控
+    │   │   ├── conservative_risk.md    # 保守风控
+    │   │   ├── neutral_risk.md         # 中性风控
+    │   │   ├── portfolio_manager.md    # 投资组合经理
+    │   │   ├── china_market_analyst.md # 中国市场分析师
+    │   │   ├── cn_news_analyst.md      # 中文新闻分析师
+    │   │   └── README.md               # 提示词索引
+    │   ├── data-sources.md         # 数据源目录（美股+A股+港股）
+    │   └── indicators.md           # 技术指标参考
+    └── scripts/
+        ├── fetch_stock_data.py     # 行情数据获取
+        ├── fetch_news.py           # 新闻数据获取
+        ├── fetch_fundamentals.py   # 基本面数据获取
+        └── fetch_sentiment.py      # 情绪数据获取
 ```
 
 ---
@@ -200,11 +218,16 @@ trad-skill/
 
 ## 脚本
 
-Python 辅助脚本（函数式编程，中文注释），用于为分析师子代理获取和格式化数据：
+Python 辅助脚本（函数式编程，中文注释），用于为分析师子代理获取和格式化数据，永不抛异常——失败时打印错误信息，代理可据此回退。
+
+> 代理必须用技能安装目录内的**绝对路径**来运行这些脚本（如 `~/.claude/skills/tradingagents-analysis/scripts/...`），因为子代理的工作目录是用户项目，而非技能文件夹。`SKILL.md` 已指示主代理在派生子代理前先解析该路径。
 
 ```bash
-# 获取行情数据（美股）
+# 在技能的 scripts/ 目录内手动测试：
 python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31
+
+# 或用绝对路径调用（代理实际调用方式）：
+python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31
 
 # 获取行情数据（A股）
 python scripts/fetch_stock_data.py --symbol 600519 --start 2024-01-01 --end 2024-01-31
@@ -228,7 +251,7 @@ python scripts/fetch_sentiment.py --symbol AAPL --limit 30
 python scripts/fetch_sentiment.py --symbol 600519
 ```
 
-> 脚本是辅助工具，不是硬性依赖。如果某个脚本执行失败或数据源不可用，代理可以回退到网络搜索、浏览器工具或其他可用方法来获取所需数据。
+> 脚本是**主要**数据源，必须优先尝试。它们不是硬性依赖是指：当某个脚本执行失败或数据源不可用时，代理**仅对脚本未能提供的部分**回退到网络搜索/浏览器工具——绝不跳过脚本直接用网页搜索。
 
 ### 依赖安装
 

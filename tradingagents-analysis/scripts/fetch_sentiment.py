@@ -13,7 +13,12 @@ import argparse
 import sys
 
 import requests
-import akshare as ak
+
+try:
+    import akshare as ak
+except ImportError:
+    # akshare 为可选依赖，缺失时 A股 相关接口降级返回不可用
+    ak = None
 
 
 def fetch_stocktwits(symbol: str, limit: int = 30) -> str:
@@ -233,7 +238,7 @@ def fetch_cn_sentiment(symbol: str) -> str:
     return "\n".join(sections)
 
 
-def fetch_sentiment(symbol: str) -> str:
+def fetch_sentiment(symbol: str, limit: int = 30) -> str:
     """
     统一市场情绪数据获取入口。
 
@@ -243,6 +248,7 @@ def fetch_sentiment(symbol: str) -> str:
 
     参数:
         symbol: 股票代码
+        limit: StockTwits 消息获取数量上限，默认 30（仅对美股/其他生效）
 
     返回:
         综合情绪报告字符串
@@ -256,7 +262,7 @@ def fetch_sentiment(symbol: str) -> str:
     sections.append(f"# {symbol} 综合情绪分析报告\n")
 
     # 获取 StockTwits 情绪数据
-    stocktwits_result = fetch_stocktwits(symbol)
+    stocktwits_result = fetch_stocktwits(symbol, limit=limit)
     sections.append(stocktwits_result)
     sections.append("\n---\n")
 
@@ -287,5 +293,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # 调用统一入口获取情绪数据
-    result = fetch_sentiment(args.symbol)
+    result = fetch_sentiment(args.symbol, limit=args.limit)
     print(result)
