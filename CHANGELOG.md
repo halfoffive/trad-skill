@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-07-24
+
+### Added
+- Standard installation via [vercel-labs/skills](https://github.com/vercel-labs/skills) CLI: `npx skills add halfoffive/trad-skill` now works across 70+ coding agents (Claude Code, Cursor, Windsurf, Trae, OpenCode, Codex, etc.).
+- `skills/tradingagents-analysis/` directory: the standard location for skills CLI discovery. Contains a full copy of the skill (identical to the root copy).
+- "For AI Agents: Installation Guide" section at the top of SKILL.md with explicit install commands, path locations, and dependency notes.
+- "For AI Agents" subsection in both READMEs with agent-specific install instructions.
+- Manual installation instructions using raw.githubusercontent.com URLs (curl-based copy-paste commands).
+
+### Changed
+- READMEs (English + Chinese): Installation section restructured — `npx skills add` is now the recommended method, custom `npx halfoffive/trad-skill` installer retained as fallback.
+- `package.json`: `files` array now includes `skills/` directory for proper npm/npx packing.
+- AGENTS.md: updated structure diagram and install command docs to reflect dual-location layout.
+
+### Notes
+- Backward compatible: the existing `npx halfoffive/trad-skill` custom installer continues to work unchanged.
+- Root `tradingagents-analysis/` is preserved as an identical copy for the custom installer; both locations are maintained.
+- Python scripts, prompts, and core pipeline logic are unchanged.
+
 ## [1.2.0] - 2026-07-23
 
 ### Changed — Deep token-cost reduction (let the LLM use python scripts)
