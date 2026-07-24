@@ -33,7 +33,7 @@ except ImportError:
 
 
 def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
-    """将 OHLCV DataFrame 规整为统一列名：Date/Open/High/Low/Close/olumnolume。"""
+    """将 OHLCV DataFrame 规整为统一列名：Date/Open/High/Low/Close/Volume。"""
     # 只保留核心列，日期列重置为普通列
     if isinstance(df.index, pd.DatetimeIndex) or "Date" not in df.columns:
         df = df.reset_index()
