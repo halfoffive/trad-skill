@@ -18,7 +18,7 @@ const SRC_DIR = path.join(__dirname, SKILL_NAME);
 const AGENT_DIRS = {
   claude: path.join(home, '.claude', 'skills'),
   agents: path.join(home, '.agents', 'skills'),
-  opencode: path.join(home, '.opencode', 'skills'),
+  opencode: path.join(home, '.config', 'opencode', 'skills'),
 };
 
 function parseArgs(argv) {

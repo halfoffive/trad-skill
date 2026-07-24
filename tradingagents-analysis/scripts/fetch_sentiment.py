@@ -207,36 +207,42 @@ def fetch_cn_sentiment(symbol: str) -> str:
     has_data = False
 
     # 获取个股评论数据
-    try:
-        df_comment = ak.stock_comment_em(symbol=symbol)
-        if df_comment is not None and not df_comment.empty:
-            has_data = True
-            sections.append("## 个股评论\n")
-            # 展示最近的评论数据
-            recent = df_comment.head(10)
-            sections.append(recent.to_markdown(index=False))
-            sections.append("")
-        else:
-            sections.append("## 个股评论\n\n> 无数据\n")
-    except Exception:
-        # 评论数据获取失败
-        sections.append("## 个股评论\n\n> 获取失败\n")
+    if ak is not None:
+        try:
+            df_comment = ak.stock_comment_em(symbol=symbol)
+            if df_comment is not None and not df_comment.empty:
+                has_data = True
+                sections.append("## 个股评论\n")
+                # 展示最近的评论数据
+                recent = df_comment.head(10)
+                sections.append(recent.to_markdown(index=False))
+                sections.append("")
+            else:
+                sections.append("## 个股评论\n\n> 无数据\n")
+        except Exception:
+            # 评论数据获取失败
+            sections.append("## 个股评论\n\n> 获取失败\n")
+    else:
+        sections.append("## 个股评论\n\n> akshare 未安装，跳过\n")
 
     # 降级：获取机构参与度数据
-    try:
-        df_detail = ak.stock_comment_detail_zlkp_jgcyd_em(symbol=symbol)
-        if df_detail is not None and not df_detail.empty:
-            has_data = True
-            sections.append("## 机构参与度\n")
-            # 展示最近的机构参与度数据
-            recent = df_detail.head(10)
-            sections.append(recent.to_markdown(index=False))
-            sections.append("")
-        else:
-            sections.append("## 机构参与度\n\n> 无数据\n")
-    except Exception:
-        # 机构参与度获取失败
-        sections.append("## 机构参与度\n\n> 获取失败\n")
+    if ak is not None:
+        try:
+            df_detail = ak.stock_comment_detail_zlkp_jgcyd_em(symbol=symbol)
+            if df_detail is not None and not df_detail.empty:
+                has_data = True
+                sections.append("## 机构参与度\n")
+                # 展示最近的机构参与度数据
+                recent = df_detail.head(10)
+                sections.append(recent.to_markdown(index=False))
+                sections.append("")
+            else:
+                sections.append("## 机构参与度\n\n> 无数据\n")
+        except Exception:
+            # 机构参与度获取失败
+            sections.append("## 机构参与度\n\n> 获取失败\n")
+    else:
+        sections.append("## 机构参与度\n\n> akshare 未安装，跳过\n")
 
     # 如果所有数据源都失败
     if not has_data:
@@ -270,12 +276,18 @@ def fetch_sentiment(symbol: str, limit: int = DEFAULT_SENTIMENT_LIMIT) -> str:
 
     # 获取 StockTwits 情绪数据
     stocktwits_result = fetch_stocktwits(symbol, limit=limit)
-    sections.append(stocktwits_result)
+    if stocktwits_result == "<unavailable>":
+        sections.append("## StockTwits 情绪\n\n> 数据源不可用\n")
+    else:
+        sections.append(stocktwits_result)
     sections.append("\n---\n")
 
     # 获取 Reddit 情绪数据
     reddit_result = fetch_reddit_sentiment(symbol)
-    sections.append(reddit_result)
+    if reddit_result == "<unavailable>":
+        sections.append("## Reddit 情绪\n\n> 数据源不可用\n")
+    else:
+        sections.append(reddit_result)
 
     return "\n".join(sections)
 
