@@ -33,7 +33,7 @@ def _fmt_num(v) -> str:
     if v is None or (isinstance(v, float) and pd.isna(v)):
         return "N/A"
     try:
-        return round(float(v), 2)
+        return str(round(float(v), 2))
     except (TypeError, ValueError):
         return str(v)
 
@@ -215,36 +215,42 @@ def fetch_cn_fundamentals(symbol: str) -> str:
     has_data = False
 
     # 获取财务分析指标（只取关键列、最近若干行，避免宽表倾倒）
-    try:
-        df_indicator = ak.stock_financial_analysis_indicator(symbol=symbol)
-        if df_indicator is not None and not df_indicator.empty:
-            has_data = True
-            sections.append("## 财务分析指标（最近 4 期，精简）\n")
-            # 取最近 4 行，且最多 6 列
-            recent = df_indicator.tail(4).iloc[:, :6]
-            sections.append(recent.to_markdown(index=False))
-            sections.append("")
-        else:
-            sections.append("## 财务分析指标\n\n> 无数据\n")
-    except Exception as e:
-        # 财务指标获取失败，记录错误
-        sections.append(f"## 财务分析指标\n\n> 获取失败: {e}\n")
+    if ak is not None:
+        try:
+            df_indicator = ak.stock_financial_analysis_indicator(symbol=symbol)
+            if df_indicator is not None and not df_indicator.empty:
+                has_data = True
+                sections.append("## 财务分析指标（最近 4 期，精简）\n")
+                # 取最近 4 行，且最多 6 列
+                recent = df_indicator.tail(4).iloc[:, :6]
+                sections.append(recent.to_markdown(index=False))
+                sections.append("")
+            else:
+                sections.append("## 财务分析指标\n\n> 无数据\n")
+        except Exception as e:
+            # 财务指标获取失败，记录错误
+            sections.append(f"## 财务分析指标\n\n> 获取失败: {e}\n")
+    else:
+        sections.append("## 财务分析指标\n\n> akshare 未安装，跳过\n")
 
     # 获取个股基本信息
-    try:
-        df_info = ak.stock_individual_info_em(symbol=symbol)
-        if df_info is not None and not df_info.empty:
-            has_data = True
-            sections.append("## 个股基本信息（精简）\n")
-            # 只取前 10 行避免长表
-            recent = df_info.head(10)
-            sections.append(recent.to_markdown(index=False))
-            sections.append("")
-        else:
-            sections.append("## 个股基本信息\n\n> 无数据\n")
-    except Exception as e:
-        # 个股信息获取失败，记录错误
-        sections.append(f"## 个股基本信息\n\n> 获取失败: {e}\n")
+    if ak is not None:
+        try:
+            df_info = ak.stock_individual_info_em(symbol=symbol)
+            if df_info is not None and not df_info.empty:
+                has_data = True
+                sections.append("## 个股基本信息（精简）\n")
+                # 只取前 10 行避免长表
+                recent = df_info.head(10)
+                sections.append(recent.to_markdown(index=False))
+                sections.append("")
+            else:
+                sections.append("## 个股基本信息\n\n> 无数据\n")
+        except Exception as e:
+            # 个股信息获取失败，记录错误
+            sections.append(f"## 个股基本信息\n\n> 获取失败: {e}\n")
+    else:
+        sections.append("## 个股基本信息\n\n> akshare 未安装，跳过\n")
 
     # 降级策略：如果 akshare 全部失败，尝试 yfinance
     if not has_data:
