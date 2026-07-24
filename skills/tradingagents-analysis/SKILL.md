@@ -3,6 +3,34 @@ name: tradingagents-analysis
 description: "Multi-agent stock/crypto trading analysis pipeline inspired by TradingAgents. Orchestrates specialized analyst sub-agents (Market, Sentiment, News, Fundamentals), structured bull/bear research debates, risk assessment debates, and a final portfolio decision. Use when the user asks for stock analysis, trading analysis, multi-agent financial research, investment research, ticker analysis, or says '分析股票', '交易分析', '多智能体分析', '投资研究'. Also trigger on any request to analyze a specific ticker symbol (AAPL, 600519, 0700.HK, BTC-USD, etc.) with a trading/investment lens."
 ---
 
+## For AI Agents: Installation Guide
+
+If this skill is not yet installed and you need to use it, install it via the standard skills CLI:
+
+```bash
+npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+```
+
+If the above fails, try the custom installer:
+
+```bash
+npx halfoffive/trad-skill
+```
+
+After installation, the skill will be available at one of these locations (check in order):
+- `~/.claude/skills/tradingagents-analysis` (Claude Code)
+- `~/.agents/skills/tradingagents-analysis` (OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
+- `~/.config/opencode/skills/tradingagents-analysis` (OpenCode global)
+
+Python dependencies (install if scripts fail):
+```bash
+pip install yfinance akshare requests pandas
+```
+
+Verify installation by checking that `SKILL.md`, `references/`, and `scripts/` exist in the skill directory. Use **absolute paths** when running scripts (see Section 4 for details).
+
+---
+
 # TradingAgents Multi-Agent Analysis
 
 ## 1. Overview
