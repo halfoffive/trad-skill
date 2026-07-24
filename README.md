@@ -37,14 +37,30 @@ The pipeline runs in six stages:
 
 ## Installation
 
-### Via npx (recommended)
+### Via `npx skills` (recommended, universal for 70+ agents)
+
+Use the standard [vercel-labs/skills](https://github.com/vercel-labs/skills) CLI — works with Claude Code, Cursor, Windsurf, Trae, OpenCode, Codex, and 70+ more agents:
+
+```bash
+# List available skills first
+npx skills add halfoffive/trad-skill --list
+
+# Install globally (user-level, all projects)
+npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+
+# Or install to project-level
+npx skills add halfoffive/trad-skill --skill tradingagents-analysis -y
+```
+
+### Via npx (custom installer, Claude Code default)
+
+The legacy custom installer copies the skill into `~/.claude/skills/tradingagents-analysis` by default:
 
 ```bash
 npx halfoffive/trad-skill
 ```
 
-This downloads and runs a tiny zero-dependency installer that copies the `tradingagents-analysis/` skill into `~/.claude/skills/tradingagents-analysis` (Claude Code). It prints the next steps when done. Options:
-
+Options:
 ```bash
 npx halfoffive/trad-skill --agent agents      # install to ~/.agents/skills
 npx halfoffive/trad-skill --agent opencode   # install to ~/.opencode/skills
@@ -53,23 +69,45 @@ npx halfoffive/trad-skill --dir <path>       # install into a custom skills dir
 
 > If `npx halfoffive/trad-skill` does not auto-run the installer on your npx version, use `npx -p halfoffive/trad-skill trad-skill`.
 
-### Tell your AI agent to install it
+### For AI Agents
 
-> Install the tradingagents-analysis skill from halfoffive/trad-skill
-
-### Manual installation
-
-Copy the skill subfolder to your AI agent's skills directory:
-
+If you are an AI agent and need to install this skill, run:
 ```bash
-# For Claude Code (user-level)
-cp -r tradingagents-analysis ~/.claude/skills/tradingagents-analysis
+npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+```
 
-# For OpenCode / generic (user-level)
-cp -r tradingagents-analysis ~/.agents/skills/tradingagents-analysis
+Then restart or open a new session to load the skill. The skill will be available at:
+- `~/.claude/skills/tradingagents-analysis` (Claude Code)
+- `~/.agents/skills/tradingagents-analysis` (OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
 
-# For OpenCode (project-level)
-cp -r tradingagents-analysis .opencode/skills/tradingagents-analysis
+### Manual installation (using raw GitHub links)
+
+Copy the skill files directly from the repository raw URLs.
+
+**Claude Code (user-level):**
+```bash
+mkdir -p ~/.claude/skills/tradingagents-analysis
+curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/SKILL.md -o ~/.claude/skills/tradingagents-analysis/SKILL.md
+mkdir -p ~/.claude/skills/tradingagents-analysis/references/prompts
+curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/data-sources.md -o ~/.claude/skills/tradingagents-analysis/references/data-sources.md
+curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/indicators.md -o ~/.claude/skills/tradingagents-analysis/references/indicators.md
+curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/prompts/README.md -o ~/.claude/skills/tradingagents-analysis/references/prompts/README.md
+for f in market_analyst sentiment_analyst news_analyst fundamentals_analyst bull_researcher bear_researcher research_manager trader aggressive_risk conservative_risk neutral_risk portfolio_manager china_market_analyst cn_news_analyst; do
+  curl -sL "https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/prompts/${f}.md" -o ~/.claude/skills/tradingagents-analysis/references/prompts/${f}.md
+done
+mkdir -p ~/.claude/skills/tradingagents-analysis/scripts
+for f in fetch_stock_data.py fetch_news.py fetch_fundamentals.py fetch_sentiment.py; do
+  curl -sL "https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/scripts/${f}" -o ~/.claude/skills/tradingagents-analysis/scripts/${f}
+done
+```
+
+**Generic / OpenCode (user-level):** replace `~/.claude/skills` with `~/.agents/skills` in the commands above.
+
+**Or simply clone/copy the directory:**
+```bash
+git clone --depth 1 https://github.com/halfoffive/trad-skill /tmp/trad-skill
+cp -r /tmp/trad-skill/skills/tradingagents-analysis ~/.claude/skills/
+rm -rf /tmp/trad-skill
 ```
 
 ---

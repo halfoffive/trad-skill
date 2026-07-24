@@ -33,14 +33,30 @@
 
 ## 安装
 
-### 通过 npx 安装（推荐）
+### 通过 npx skills 安装（推荐，70+ 代理通用）
+
+使用标准的 [vercel-labs/skills](https://github.com/vercel-labs/skills) CLI — 支持 Claude Code、Cursor、Windsurf、Trae、OpenCode、Codex 等 70+ 种编码代理：
+
+```bash
+# 先查看可用技能
+npx skills add halfoffive/trad-skill --list
+
+# 全局安装（用户级，所有项目可用）
+npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+
+# 或安装到项目级
+npx skills add halfoffive/trad-skill --skill tradingagents-analysis -y
+```
+
+### 通过 npx 安装（自定义安装器，Claude Code 默认）
+
+旧版自定义安装器，默认将技能复制到 `~/.claude/skills/tradingagents-analysis`：
 
 ```bash
 npx halfoffive/trad-skill
 ```
 
-这会下载并运行一个零依赖的微型安装器，把 `tradingagents-analysis/` 技能复制到 `~/.claude/skills/tradingagents-analysis`（Claude Code）。安装器会打印后续步骤。可选参数：
-
+可选参数：
 ```bash
 npx halfoffive/trad-skill --agent agents      # 安装到 ~/.agents/skills
 npx halfoffive/trad-skill --agent opencode   # 安装到 ~/.opencode/skills
@@ -49,23 +65,45 @@ npx halfoffive/trad-skill --dir <path>       # 安装到自定义技能目录
 
 > 若 `npx halfoffive/trad-skill` 在你的 npx 版本上没有自动运行安装器，请使用 `npx -p halfoffive/trad-skill trad-skill`。
 
-### 让 AI 代理帮你安装
+### 给 AI 代理的说明
 
-> 安装 halfoffive/trad-skill 中的 tradingagents-analysis 技能
-
-### 手动安装
-
-将技能子目录复制到 AI 代理的技能文件夹：
-
+如果你是 AI 代理需要安装本技能，请运行：
 ```bash
-# Claude Code（用户级）
-cp -r tradingagents-analysis ~/.claude/skills/tradingagents-analysis
+npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+```
 
-# OpenCode / 通用（用户级）
-cp -r tradingagents-analysis ~/.agents/skills/tradingagents-analysis
+安装后重启或开启新会话以加载技能。技能将安装在以下位置之一：
+- `~/.claude/skills/tradingagents-analysis`（Claude Code）
+- `~/.agents/skills/tradingagents-analysis`（OpenCode、Cline、Cursor、Windsurf、Codex 等）
 
-# OpenCode（项目级）
-cp -r tradingagents-analysis .opencode/skills/tradingagents-analysis
+### 手动安装（使用 raw GitHub 链接直接复制）
+
+直接从仓库的 raw URL 复制技能文件。
+
+**Claude Code（用户级）：**
+```bash
+mkdir -p ~/.claude/skills/tradingagents-analysis
+curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/SKILL.md -o ~/.claude/skills/tradingagents-analysis/SKILL.md
+mkdir -p ~/.claude/skills/tradingagents-analysis/references/prompts
+curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/data-sources.md -o ~/.claude/skills/tradingagents-analysis/references/data-sources.md
+curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/indicators.md -o ~/.claude/skills/tradingagents-analysis/references/indicators.md
+curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/prompts/README.md -o ~/.claude/skills/tradingagents-analysis/references/prompts/README.md
+for f in market_analyst sentiment_analyst news_analyst fundamentals_analyst bull_researcher bear_researcher research_manager trader aggressive_risk conservative_risk neutral_risk portfolio_manager china_market_analyst cn_news_analyst; do
+  curl -sL "https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/prompts/${f}.md" -o ~/.claude/skills/tradingagents-analysis/references/prompts/${f}.md
+done
+mkdir -p ~/.claude/skills/tradingagents-analysis/scripts
+for f in fetch_stock_data.py fetch_news.py fetch_fundamentals.py fetch_sentiment.py; do
+  curl -sL "https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/scripts/${f}" -o ~/.claude/skills/tradingagents-analysis/scripts/${f}
+done
+```
+
+**通用 / OpenCode（用户级）：** 将上面命令中的 `~/.claude/skills` 替换为 `~/.agents/skills`。
+
+**或者直接 clone 后复制目录：**
+```bash
+git clone --depth 1 https://github.com/halfoffive/trad-skill /tmp/trad-skill
+cp -r /tmp/trad-skill/skills/tradingagents-analysis ~/.claude/skills/
+rm -rf /tmp/trad-skill
 ```
 
 ---
