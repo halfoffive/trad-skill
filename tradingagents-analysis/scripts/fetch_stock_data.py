@@ -213,12 +213,20 @@ def compute_stats(df: pd.DataFrame) -> str:
         window = close.tail(252) if len(close) >= 252 else close
         hi = window.max()
         lo = window.min()
+
+        # 数值格式化：NaN / 非数值 → "N/A"（与 avg_vol 处理一致，避免输出 "nan%" 误导 LLM）
+        def _num(v, ndigits: int = 2) -> str:
+            try:
+                return str(round(float(v), ndigits)) if pd.notna(v) else "N/A"
+            except (TypeError, ValueError):
+                return "N/A"
+
         lines = [
             "## 区间统计\n",
-            f"- 区间收益率: {round(float(ret), 2)}%",
-            f"- 年化波动率: {round(float(vol), 2)}%",
+            f"- 区间收益率: {_num(ret)}%",
+            f"- 年化波动率: {_num(vol)}%",
             f"- 日均成交量: {int(avg_vol) if pd.notna(avg_vol) else 'N/A'}",
-            f"- 52周(或区间)高/低: {round(float(hi), 4)} / {round(float(lo), 4)}",
+            f"- 52周(或区间)高/低: {_num(hi, 4)} / {_num(lo, 4)}",
         ]
         return "\n".join(lines) + "\n"
     except Exception as e:
@@ -505,6 +513,12 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
         help="输出区间统计（收益率/波动率/均量/52周高低）",
+    )
+    parser.add_argument(
+        "--no-stats",
+        dest="stats",
+        action="store_false",
+        help="关闭区间统计（与 --stats 对称，显式关闭）",
     )
     parser.add_argument(
         "--raw",

@@ -135,15 +135,16 @@ def fetch_us_fundamentals(symbol: str) -> str:
     返回:
         markdown 格式的基本面报告字符串
     """
+    # 防御性规整：去首尾空格（契约：函数不抛异常）
+    symbol = (symbol or "").strip()
     # 初始化报告内容
     sections: list[str] = []
     sections.append(f"# {symbol} 基本面（精简）\n")
 
-    # 创建 Ticker 对象
-    ticker = yf.Ticker(symbol)
-
-    # 获取公司概况信息（紧凑）
+    # 创建 Ticker 对象 + 获取公司概况信息（紧凑）
+    # yf.Ticker 对空串会抛 ValueError，需包在 try/except 内（与 fetch_us_stock_data 一致）
     try:
+        ticker = yf.Ticker(symbol)
         info = ticker.info
         sections.append("## 公司概况\n")
         # 提取关键字段，缺失时用 N/A 占位
@@ -295,6 +296,13 @@ def fetch_fundamentals(symbol: str) -> str:
     返回:
         markdown 格式的基本面报告字符串
     """
+    # 契约守卫：非字符串 / 空串 / 纯空白返回错误字符串，不抛异常
+    # （fetch_us_fundamentals 的 yf.Ticker 对空串抛 ValueError，需在此拦截）
+    if not isinstance(symbol, str):
+        return f"错误: 无效的股票代码 {symbol!r}"
+    symbol = symbol.strip()
+    if not symbol:
+        return "错误: 股票代码不能为空"
     # 判断是否为A股代码（6位纯数字）
     if symbol.isdigit() and len(symbol) == 6:
         return fetch_cn_fundamentals(symbol)
