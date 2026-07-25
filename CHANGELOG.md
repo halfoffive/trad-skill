@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4] - 2026-07-25
+
+### Fixed (round 4)
+
+- **`fetch_fundamentals("")` / `fetch_fundamentals(None)` 抛异常**：`fetch_us_fundamentals` 的 `yf.Ticker(symbol)` 在 try/except 之外，空串触发 `ValueError: Empty ticker name`；`fetch_fundamentals` 的 `symbol.isdigit()` 对 None 触发 `AttributeError`。违反 AGENTS.md "never raises" 契约。入口加 `isinstance(symbol, str)` + `strip()` + 空串守卫返回错误字符串；`yf.Ticker(symbol)` 移入既有 try/except（与 `fetch_us_stock_data` 一致）。
+- **`compute_stats` 输出 "年化波动率: nan%"**：单行 DataFrame（或 `pct_change().dropna()` 不足 2 行）时 `vol` 为 NaN，`round(float(vol), 2)` 输出 `"nan%"`，对 LLM 有误导（看似数值）。引入 `_num()` helper，NaN/非数值 → "N/A"，应用于 `ret`/`vol`/`hi`/`lo`（与 `avg_vol` 处理一致）。
+- **`README.md` / `README_CN.md` 示例日期与 SKILL.md §6 矛盾**：Round 3 BUG 7 把 SKILL.md §6 示例扩到 1 年（`2023-07-01` 至 `2024-06-30`），但漏改两份 README，仍残留 `2024-01-01 --end 2024-06-30`（6 个月）和 `2024-01-01 --end 2024-01-31`（1 个月）。用户复制 README 示例运行会得到 SMA200=N/A。两份 README 的指标示例同步为 `2023-07-01 --end 2024-06-30`；raw 示例扩到 6 个月。
+- **`sentiment_analyst.md` 的 `{news_block}` 无数据源**：verbatim 提示词期望 `{news_block}` / `{stocktwits_block}` / `{reddit_block}` 三块预取数据，但 SKILL.md spawn 只让跑 `fetch_sentiment.py`（无新闻），`{news_block}` 孤立。在 `prompts/README.md` 文档化映射：`{stocktwits_block}`/`{reddit_block}` → 脚本输出对应段落；`{news_block}` → 脚本不提供，用 web-search fallback 或留空（News Analyst 单独覆盖新闻）。
+- **verbatim 提示词 30 个模板变量未文档化替换规则**：`{ticker}`、`{current_date}`、`{instrument_context}`、`{get_language_instruction()}`、`{NO_EXTERNAL_TOOLS}`、`{tool_names}`、`{system_message}`、`{target_label}`、`{company_name}`、`{asset_label}` 等 30 个 LangChain 风格变量，SKILL.md 从未指导主代理替换，子代理收到字面量 `{...}`。新增 `prompts/README.md` "Template Variable Substitution" 章节，5 个子表（Identity / Dates / Context-language-tooling / Data reports / Pre-fetched blocks）覆盖全部 30 个变量；SKILL.md §4 加指针。
+- **`--no-stats` 参数缺失**：`--indicators` 配对了 `--no-indicators`，但 `--stats` 只有 store_true 无配对 `--no-stats`。用户尝试 `--no-stats` 会触发 argparse `unrecognized arguments`。补 `--no-stats`（dest="stats", action="store_false"）。
+- **`prompts/README.md` Tool-Name Override 只覆盖 `market_analyst.md`**：Round 3 BUG 9 只列 `get_stock_data`/`get_indicators`/`get_verified_market_snapshot`，漏掉 `news_analyst.md` 的 `get_news`/`get_global_news`/`get_macro_indicators`/`get_prediction_markets` 和 `fundamentals_analyst.md` 的 `get_fundamentals`/`get_balance_sheet`/`get_cashflow`/`get_income_statement`。扩展章节覆盖全部 9 个 ghost tools，标注哪些有脚本映射、哪些需 web-search fallback。
+
+### Changed
+
+- `package.json` `version`: `1.3.2` → `1.3.4`（跳过 1.3.3 避免与 round-3 PR 冲突）。
+
 ## [1.3.2] - 2026-07-25
 
 ### Fixed (round 3)
