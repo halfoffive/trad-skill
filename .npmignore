@@ -1,0 +1,13 @@
+# Python bytecode
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Tooling state
+.omo/
+.codegraph/
+.trae/
+.vscode/
+
+# Logs
+*.log
