@@ -9,27 +9,27 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **API Key**: Not required (free)
 - **Markets**: US, HK, global exchanges
 - **Used by**: Market Analyst, Fundamentals Analyst, News Analyst
-- **Fallback**: Alpha Vantage
+- **Fallback**: Alpha Vantage (not wired in scripts; agent uses web search fallback)
 
 ### Alpha Vantage
 - **Provides**: Stock data, technical indicators, fundamental data, news
 - **API Key**: Required (ALPHA_VANTAGE_API_KEY, free tier available)
 - **Markets**: US primarily
-- **Used by**: Market Analyst, Fundamentals Analyst, News Analyst
+- **Used by**: Market Analyst, Fundamentals Analyst, News Analyst (not wired in scripts; agent uses web search fallback)
 - **Fallback**: yfinance
 
 ### FRED (Federal Reserve Economic Data)
 - **Provides**: Macroeconomic indicators (CPI, Core PCE, unemployment, fed funds rate, 10Y treasury, yield curve)
 - **API Key**: Required (FRED_API_KEY, free)
 - **Markets**: US macro
-- **Used by**: News Analyst (macro context)
+- **Used by**: News Analyst (macro context) (not wired in scripts; agent uses web search fallback)
 - **Indicators available**: cpi, core_pce, unemployment, fed_funds_rate, 10y_treasury, yield_curve
 
 ### Polymarket
 - **Provides**: Prediction market probabilities for forward-looking events
 - **API Key**: Not required (keyless)
 - **Markets**: Global events
-- **Used by**: News Analyst
+- **Used by**: News Analyst (not wired in scripts; agent uses web search fallback)
 - **Example queries**: "Fed rate cut", "recession 2026", geopolitical events
 
 ### StockTwits
@@ -52,7 +52,7 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **Provides**: A股 daily/weekly/monthly data, financial statements, fundamentals
 - **API Key**: Required (TUSHARE_TOKEN)
 - **Markets**: China A-shares (Shanghai .SS, Shenzhen .SZ)
-- **Used by**: China Market Analyst, Fundamentals Analyst
+- **Used by**: China Market Analyst, Fundamentals Analyst (not wired in scripts; agent uses web search fallback)
 - **Priority**: Primary for A-shares
 
 ### AKShare
@@ -60,20 +60,20 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **API Key**: Not required (free, open source)
 - **Markets**: China A-shares, HK stocks
 - **Used by**: China Market Analyst, Sentiment Analyst (CN)
-- **Fallback chain**: stock_bid_ask_em → stock_zh_a_spot → stock_zh_a_spot_em → stock_zh_a_hist
+- **Uses**: stock_zh_a_hist
 
 ### Baostock
 - **Provides**: A股 historical K-line data, financial reports
 - **API Key**: Not required (free)
 - **Markets**: China A-shares
-- **Used by**: China Market Analyst (fallback)
+- **Used by**: China Market Analyst (fallback) (not wired in scripts; agent uses web search fallback)
 - **Priority**: Tertiary fallback
 
 ### TDX / 通达信
 - **Provides**: Technical indicators, real-time quotes
 - **API Key**: Not required (local data)
 - **Markets**: China A-shares
-- **Used by**: China Market Analyst (technical analysis)
+- **Used by**: China Market Analyst (technical analysis) (not wired in scripts; agent uses web search fallback)
 
 ### Google News (Chinese)
 - **Provides**: Chinese financial news articles
@@ -91,21 +91,23 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 ## Data Source Degradation Chains
 
 ### A-Share Data (CN)
-MongoDB cache → Tushare → AKShare → Baostock → TDX
+AKShare → yfinance
 
 ### US Stock Data
-yfinance → Alpha Vantage
+yfinance
 
 ### HK Stock Data
 AKShare → yfinance
 
 ### News (US)
-Yahoo Finance News → Alpha Vantage News → Google News
+yfinance + Google News
 
 ### News (CN)
 Unified news tool (auto-detects market type) → Google News (Chinese) → AKShare news
 
 ## Configuration
+
+> **Note**: This configuration system belongs to the original TradingAgents framework. This skill's scripts do NOT read `data_vendors` / `tool_vendors` / API key env vars (except akshare which needs no key).
 
 Data sources are configured via:
 - Environment variables (API keys)
