@@ -59,7 +59,7 @@ npx halfoffive/trad-skill
 可选参数：
 ```bash
 npx halfoffive/trad-skill --agent agents      # 安装到 ~/.agents/skills
-npx halfoffive/trad-skill --agent opencode   # 安装到 ~/.opencode/skills
+npx halfoffive/trad-skill --agent opencode   # 安装到 ~/.config/opencode/skills
 npx halfoffive/trad-skill --dir <path>       # 安装到自定义技能目录
 ```
 
@@ -75,6 +75,7 @@ npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
 安装后重启或开启新会话以加载技能。技能将安装在以下位置之一：
 - `~/.claude/skills/tradingagents-analysis`（Claude Code）
 - `~/.agents/skills/tradingagents-analysis`（OpenCode、Cline、Cursor、Windsurf、Codex 等）
+- `~/.config/opencode/skills/tradingagents-analysis`（OpenCode 全局）
 
 ### 手动安装（使用 raw GitHub 链接直接复制）
 
@@ -126,7 +127,7 @@ rm -rf /tmp/trad-skill
 
 - 股票代码使用6位纯数字格式（如 600519、000858）
 - 自动识别上海/深圳市场（`.SS` 后缀为上海，`.SZ` 后缀为深圳）
-- 数据源优先级：Tushare → AKShare → Baostock
+- 数据源优先级：AKShare → yfinance
 - 支持中文新闻和情绪分析
 - 使用中国市场专用分析师提示词（`china_market_analyst.md`、`cn_news_analyst.md`）
 
@@ -197,8 +198,10 @@ trad-skill/                        # 仓库根目录（元文件 + 安装器）
 ├── README_CN.md                   # 本文件（中文文档）
 ├── CHANGELOG.md                   # 版本历史
 ├── AGENTS.md                      # AI 代理接入文档
-└── LICENSE                        # Apache 2.0 许可证
-└── tradingagents-analysis/        # 可安装的技能
+├── LICENSE                        # Apache 2.0 许可证
+├── skills/                        # vercel-labs/skills 标准位置
+│   └── tradingagents-analysis/    # 可安装的技能（标准路径）
+└── tradingagents-analysis/        # 可安装的技能（根副本，向后兼容）
     ├── SKILL.md                   # 核心技能指令文件
     ├── references/
     │   ├── prompts/               # 14个智能体角色提示词

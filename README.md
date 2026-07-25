@@ -63,7 +63,7 @@ npx halfoffive/trad-skill
 Options:
 ```bash
 npx halfoffive/trad-skill --agent agents      # install to ~/.agents/skills
-npx halfoffive/trad-skill --agent opencode   # install to ~/.opencode/skills
+npx halfoffive/trad-skill --agent opencode   # install to ~/.config/opencode/skills
 npx halfoffive/trad-skill --dir <path>       # install into a custom skills dir
 ```
 
@@ -79,6 +79,7 @@ npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
 Then restart or open a new session to load the skill. The skill will be available at:
 - `~/.claude/skills/tradingagents-analysis` (Claude Code)
 - `~/.agents/skills/tradingagents-analysis` (OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
+- `~/.config/opencode/skills/tradingagents-analysis` (OpenCode global)
 
 ### Manual installation (using raw GitHub links)
 
@@ -142,7 +143,7 @@ The agent will orchestrate the full pipeline and produce a structured investment
 | `output_language` | English / Chinese | match user | Language for all reports |
 | `market` | auto-detect | ... | Detected from ticker suffix |
 
-Market auto-detection: `.SS` or `.SZ` suffix means A-shares, `.HK` means HK stocks, `-USD` means Crypto, everything else defaults to US stocks.
+Market auto-detection: 6-digit pure number (e.g., 600519, 000858) → A-shares, `.HK` means HK stocks, `-USD` means Crypto, everything else defaults to US stocks.
 
 ---
 
@@ -197,8 +198,10 @@ trad-skill/                        # repo root (meta files + installer)
 ├── README_CN.md                   # Chinese documentation
 ├── CHANGELOG.md                   # Version history
 ├── AGENTS.md                      # AI-agent onboarding doc
-└── LICENSE                        # Apache 2.0
-└── tradingagents-analysis/        # the installable skill
+├── LICENSE                        # Apache 2.0
+├── skills/                        # vercel-labs/skills standard location
+│   └── tradingagents-analysis/    # the installable skill (standard path)
+└── tradingagents-analysis/        # the installable skill (root copy, backward compat)
     ├── SKILL.md                   # Core skill instructions (pipeline, orchestration, output format)
     ├── references/
     │   ├── prompts/               # 14 verbatim agent role prompts
@@ -221,7 +224,7 @@ trad-skill/                        # repo root (meta files + installer)
     │   └── indicators.md          # Technical indicator reference
     └── scripts/
         ├── fetch_stock_data.py    # Stock OHLCV data fetcher (US/A-shares/HK/Crypto)
-        ├── fetch_news.py          # News data fetcher (company + macro)
+        ├── fetch_news.py          # News data fetcher (company news)
         ├── fetch_fundamentals.py  # Fundamentals data fetcher (financial statements)
         └── fetch_sentiment.py     # Sentiment data fetcher (StockTwits, Reddit)
 ```
