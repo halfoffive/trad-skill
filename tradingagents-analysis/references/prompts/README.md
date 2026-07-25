@@ -8,6 +8,8 @@ Verbatim prompt extractions from the TradingAgents multi-agent trading framework
 Analysts (parallel) → Research Debate (sequential) → Decision → Risk Debate (sequential) → Final Decision
 ```
 
+> Note: "Decision" here = Research Manager + Trader; see SKILL.md §3 for the full 6-stage flow.
+
 ## Prompt Index
 
 | # | File | Role | Pipeline Stage | Source Repo |
@@ -30,11 +32,11 @@ Analysts (parallel) → Research Debate (sequential) → Decision → Risk Debat
 ## Stage Details
 
 ### Analyst Stage (parallel)
-- **Market Analyst**: Technical analysis using up to 8 complementary indicators (SMA, EMA, MACD, RSI, Bollinger, ATR, VWMA)
+- **Market Analyst**: Technical analysis using up to 8 complementary indicators (SMA, EMA, MACD, RSI, Bollinger, ATR, VWMA, MFI)
 - **Sentiment Analyst**: Multi-source sentiment (Yahoo Finance news + StockTwits + Reddit) with structured output
 - **News Analyst**: Macro/news research using FRED data, prediction markets, and global news
 - **Fundamentals Analyst**: Financial statements, balance sheet, cash flow, income statement analysis
-- **China Market Analyst** (CN): A-share/HK-specific analysis with Tushare data, T+1 rules, price limits
+- **China Market Analyst** (CN): A-share/HK-specific analysis with akshare data (Tushare referenced in prompt but not wired in scripts), T+1 rules, price limits
 - **CN News Analyst** (CN): Chinese financial news analysis with timeliness and impact assessment
 
 ### Research Debate (sequential, multi-round)
@@ -59,5 +61,5 @@ Prompts contain Python f-string variables (e.g., `{ticker}`, `{market_research_r
 
 ## Source Repositories
 
-- **TradingAgents**: `D:\niaod\RustroverProjects\trad\TradingAgents\`
-- **TradingAgents-CN**: `D:\niaod\RustroverProjects\trad\TradingAgents-CN\`
+- **TradingAgents**: https://github.com/TauricResearch/TradingAgents
+- **TradingAgents-CN**: https://github.com/hsliuping/TradingAgents-CN
