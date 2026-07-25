@@ -1,6 +1,6 @@
-# TradingAgents Skill Bug 修复 Round 3 - 任务列表
+﻿# TradingAgents Skill Bug 修复 Round 3 - 任务列表
 
-## Task 1: 修复 `fetch_stock_data.py` `--start`/`--end` required 与文档矛盾 [BUG 1]
+## [x] Task 1: 修复 `fetch_stock_data.py` `--start`/`--end` required 与文档矛盾 [BUG 1]
 - **Priority**: high
 - **Depends On**: None
 - **Description**:
@@ -18,7 +18,7 @@
   - programmatic: 默认值逻辑正确（今天 / 今天-365d）
   - programmatic: 两份拷贝 diff 为空
 
-## Task 2: 修复 `fetch_cn_sentiment` 裸 `<unavailable>` [BUG 2]
+## [x] Task 2: 修复 `fetch_cn_sentiment` 裸 `<unavailable>` [BUG 2]
 - **Priority**: high
 - **Depends On**: None
 - **Description**:
@@ -33,7 +33,7 @@
   - programmatic: grep `return "<unavailable>"` 在 `fetch_cn_sentiment` 函数内不再出现
   - programmatic: 两份拷贝 diff 为空
 
-## Task 3: 修复 `data-sources.md` CN 新闻降级链顺序 [BUG 3]
+## [x] Task 3: 修复 `data-sources.md` CN 新闻降级链顺序 [BUG 3]
 - **Priority**: medium
 - **Depends On**: None
 - **Description**:
@@ -46,7 +46,7 @@
   - programmatic: grep 确认 L106 含 "AKShare news → Google News"
   - programmatic: 两份拷贝 diff 为空
 
-## Task 4: 修复 SKILL.md §3 News Analyst 过度声称 [BUG 4]
+## [x] Task 4: 修复 SKILL.md §3 News Analyst 过度声称 [BUG 4]
 - **Priority**: medium
 - **Depends On**: None
 - **Description**:
@@ -59,7 +59,7 @@
   - programmatic: grep SKILL.md §3 确认无 "FRED indicators" / "prediction markets" 在 News Analyst 行
   - programmatic: 两份拷贝 diff 为空
 
-## Task 5: 修复 `install.mjs` L97 过时注释 [BUG 5]
+## [x] Task 5: 修复 `install.mjs` L97 过时注释 [BUG 5]
 - **Priority**: low
 - **Depends On**: None
 - **Description**:
@@ -69,7 +69,7 @@
 - **Test**:
   - programmatic: grep install.mjs 确认无"若不存在则回退"
 
-## Task 6: 修复 SKILL.md §3 Sentiment Analyst 过度声称 [BUG 6]
+## [x] Task 6: 修复 SKILL.md §3 Sentiment Analyst 过度声称 [BUG 6]
 - **Priority**: low
 - **Depends On**: None
 - **Description**:
@@ -82,7 +82,7 @@
   - programmatic: grep SKILL.md §3 确认无 "news headlines" 在 Sentiment Analyst 行
   - programmatic: 两份拷贝 diff 为空
 
-## Task 7: 修复 SKILL.md §6 示例时间窗口 [BUG 7]
+## [x] Task 7: 修复 SKILL.md §6 示例时间窗口 [BUG 7]
 - **Priority**: low
 - **Depends On**: None
 - **Description**:
@@ -95,7 +95,7 @@
   - programmatic: 检查示例 --start 到 --end 跨度 ≥ 10 个月
   - programmatic: 两份拷贝 diff 为空
 
-## Task 8: 修复 `fetch_stock_data.py` 负数 `--tail` 崩溃 [BUG 8]
+## [x] Task 8: 修复 `fetch_stock_data.py` 负数 `--tail` 崩溃 [BUG 8]
 - **Priority**: low
 - **Depends On**: None
 - **Description**:
@@ -109,7 +109,7 @@
   - programmatic: `--tail -5` 不抛 ValueError
   - programmatic: 两份拷贝 diff 为空
 
-## Task 9: 文档化 `prompts/README.md` 工具名 override [BUG 9]
+## [x] Task 9: 文档化 `prompts/README.md` 工具名 override [BUG 9]
 - **Priority**: low
 - **Depends On**: None
 - **Description**:
@@ -124,7 +124,7 @@
   - programmatic: git diff 确认 prompt .md 文件未变
   - programmatic: 两份拷贝 diff 为空
 
-## Task 10: CHANGELOG + version bump
+## [x] Task 10: CHANGELOG + version bump
 - **Priority**: medium
 - **Depends On**: [Task 1-9]
 - **Description**:
@@ -137,7 +137,7 @@
   - programmatic: grep CHANGELOG 确认 1.3.2 段落
   - programmatic: grep package.json 确认 "version": "1.3.2"
 
-## Task 11: 最终验证
+## [x] Task 11: 最终验证
 - **Priority**: high
 - **Depends On**: [Task 1-10]
 - **Description**:
@@ -151,3 +151,7 @@
   - `fetch_sentiment.py --symbol 600519`（akshare 不可用时）不返回裸 `<unavailable>`。
 - **Test**:
   - programmatic: 全部上述检查通过
+
+
+## Status
+全部完成。9 个任务已实施并验证通过（41/41 检查点）。
