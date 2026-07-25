@@ -265,16 +265,16 @@ Python 辅助脚本（函数式编程，中文注释），用于为分析师子�
 
 ```bash
 # 在技能的 scripts/ 目录内手动测试（行情：尾部 OHLCV + 预计算指标 + 可选统计，默认精简）：
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 或用绝对路径调用（代理实际调用方式）：
-python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 旧行为：整段原始 CSV（token 开销大，慎用）
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31 --raw
+python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --raw
 
 # 获取行情数据（A股）
-python scripts/fetch_stock_data.py --symbol 600519 --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python scripts/fetch_stock_data.py --symbol 600519 --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 获取新闻（美股，默认 --limit 8，摘要截断）
 python scripts/fetch_news.py --symbol AAPL --days 7 --limit 8

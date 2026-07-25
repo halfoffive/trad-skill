@@ -257,13 +257,13 @@ Python helper scripts for data fetching, **compaction, and pre-computation**. Fu
 
 ```bash
 # Stock data: OHLCV tail + pre-computed indicators + optional stats (default; compact)
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Or by absolute path (how the agent invokes them):
-python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Legacy full-range raw CSV (token-heavy, avoid)
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31 --raw
+python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --raw
 
 # Fetch news (default --limit 8 per source, summaries truncated)
 python scripts/fetch_news.py --symbol AAPL --days 7 --limit 8
