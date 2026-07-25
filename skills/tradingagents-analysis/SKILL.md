@@ -63,7 +63,7 @@ This skill replicates the TradingAgents multi-agent pipeline, drawing on the ope
    | `max_debate_rounds` | 1 | 1–3 bull/bear exchanges |
    | `max_risk_discuss_rounds` | 1 | 1–3 risk-debate exchanges |
    | `output_language` | match the user's language | English or 中文 |
-   | `market` | auto-detect from ticker | `.SS`/`.SZ`→A股, `.HK`→港股, `-USD`→Crypto, else US |
+   | `market` | auto-detect from ticker | 6 位纯数字（如 600519、000858）→A股, `.HK`→港股, `-USD`→Crypto, else US |
 
 3. The user may override any default inline (e.g. "用中文输出", "run 3 debate rounds"). Honor stated preferences.
 4. Only once a ticker is confirmed, proceed to the pipeline below.
@@ -72,7 +72,7 @@ This skill replicates the TradingAgents multi-agent pipeline, drawing on the ope
 
 ## 3. Pipeline Architecture
 
-The analysis runs as a six-stage pipeline. Stages 1 uses parallel sub-agents; stages 2–6 run sequentially in the main context.
+The analysis runs as a six-stage pipeline. Stage 1 uses parallel sub-agents; stages 2–6 run sequentially in the main context.
 
 ### Stage 1 — Analyst Team (PARALLEL)
 
@@ -127,6 +127,8 @@ Spawn **four parallel sub-agents**, one per analyst role. Each sub-agent receive
    - `references/prompts/sentiment_analyst.md`
    - `references/prompts/news_analyst.md`
    - `references/prompts/fundamentals_analyst.md`
+
+   > **CN market prompt swap.** 当 `market` 为 A 股或港股时，用 `references/prompts/china_market_analyst.md` 替换 `market_analyst.md`，用 `references/prompts/cn_news_analyst.md` 替换 `news_analyst.md`；其余 3 个分析师（Sentiment / Fundamentals / Bull-Bear-Researcher 等）保持不变。
 3. The **absolute path** to its data script (see Section 6).
 
 ### Resolve the skill directory first (important)
@@ -149,7 +151,7 @@ Use background task spawning for parallelism:
 task(subagent_type="general", run_in_background=true,
      prompt="<role prompt contents>\n\nAnalyze {ticker} as of {date}.\n" +
             "Gather data FIRST by running the script, then write your report.\n" +
-            "Run: python \"{SCRIPTS_DIR}/fetch_stock_data.py\" --symbol {ticker} --start {start} --end {end}\n" +
+            "Run: python \"{SCRIPTS_DIR}/{script_name}\" {script_args}\n" +
             "The script output is ALREADY compact and (for market data) pre-computes indicators — " +
             "it is your data source AND your verified snapshot; do NOT call get_stock_data / " +
             "get_indicators / get_verified_market_snapshot or any other tool name, they do not exist. " +
@@ -157,7 +159,7 @@ task(subagent_type="general", run_in_background=true,
             "If the script errors, fall back to web search / browser tools only for the parts it could not provide.")
 ```
 
-Substitute the correct script per analyst (see Section 6). **Scripts are the primary data source** — the analyst must run its assigned script before writing its report; web search / browser tools are a fallback only when a script fails or returns no data for a given source.
+Substitute the correct script name **and** args per analyst (see Section 6) — replace `{script_name}` and `{script_args}` per the §6 table. **Scripts are the primary data source** — the analyst must run its assigned script before writing its report; web search / browser tools are a fallback only when a script fails or returns no data for a given source.
 
 > **Token discipline.** Each analyst report must be **concise (target ≤ 400 words)** and structured as: a `## Key Signals` block of 5–8 actionable bullets at the top, a short evidence section referencing the script's key numbers (not reproducing the raw output), and one summary table. The `## Key Signals` block is what downstream stages consume — keep it self-contained. This overrides any "very detailed" phrasing in the verbatim role prompt: be evidence-dense, not verbose.
 
@@ -233,9 +235,11 @@ Helper scripts live in this skill's `scripts/` directory. They fetch, **compact,
 | Script | Purpose | Invocation |
 |---|---|---|
 | `fetch_stock_data.py` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). Use `--stats` for return/volatility/52w range; `--raw` for the legacy full-range CSV (token-heavy, avoid). | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats` |
-| `fetch_news.py` | Company and macro news (US: yfinance + Google News RSS; A股: 东方财富/akshare). Default `--limit 8` per source; all summaries truncated. | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7 --limit 8` |
+| `fetch_news.py` | Company news (US: yfinance + Google News RSS; A股: 东方财富/akshare). Default `--limit 8` per source; all summaries truncated. | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7 --limit 8` |
 | `fetch_fundamentals.py` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `python "<skill>/scripts/fetch_fundamentals.py" --symbol AAPL` |
-| `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit, headline analysis (A股: 机构参与度/akshare). Default `--limit 15`; message/post displays trimmed. | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 15` |
+| `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit (A股: 机构参与度/akshare). Default `--limit 15`; message/post displays trimmed. | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 15` |
+
+> **Default date window for `fetch_stock_data.py`.** 对 `fetch_stock_data.py`，默认 `--start` 取 trade date 前 1 年、`--end` 取 trade date 当天（至少需 200 个交易日才能算 SMA200）。
 
 For the full catalog of data sources, APIs, and fallback strategies, see `references/data-sources.md`.
 
@@ -280,7 +284,7 @@ Close with a summary table:
 
 **Market auto-detection rules**:
 
-- Suffix `.SS` or `.SZ` → A股 (China A-shares)
+- 6 位纯数字（如 600519、000858） → A股 (China A-shares)
 - Suffix `.HK` → 港股 (HK stocks)
 - Suffix `-USD` → Crypto
 - Everything else → US stocks
