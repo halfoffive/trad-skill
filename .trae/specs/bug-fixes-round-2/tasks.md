@@ -1,5 +1,9 @@
 # 第二轮 Bug 修复 - 任务清单
 
+> **状态**: 全部完成。所有 13 个任务已实施并验证通过。PR: https://github.com/halfoffive/trad-skill/pull/3
+>
+> 22 项自动化检查 + 4 项 install.mjs 功能测试全部 PASS。8 个 Python 脚本（4 × 2 拷贝）通过 ast.parse；两份技能目录字节一致；npm tarball 不含 `__pycache__`/`.pyc`；`--dir`/`--agent` 参数校验、`~` 展开、未知参数 fail 均符合 spec。
+
 ## 实现策略
 - 新分支 `fix/round2-bugs`，基于 `main`
 - 按任务组提交，每组 1 commit，提交后立即 `git push`
