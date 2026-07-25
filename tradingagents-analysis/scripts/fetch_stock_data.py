@@ -20,6 +20,7 @@
 # 返回值：格式化的字符串（适合注入LLM提示词）
 
 import argparse
+from datetime import date, timedelta
 
 import pandas as pd
 import yfinance as yf
@@ -421,6 +422,8 @@ def build_compact_report(symbol: str, start_date: str, end_date: str, tail: int,
     构建精简报告：OHLCV tail + (可选)统计 + (可选)指标快照。
     替代整段原始 CSV，大幅降低注入提示词的 token 量。
     """
+    # 钳制负数 tail，避免 df.tail() 抛 ValueError（契约：函数不抛异常）
+    tail = max(0, int(tail))
     # 仅触发一次网络请求，拿到完整 CSV 文本
     csv_text = fetch_stock_data(symbol, start_date, end_date)
     # 抓取失败直接返回错误信息，避免重复请求
@@ -468,14 +471,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--start",
         type=str,
-        required=True,
-        help="起始日期，格式 YYYY-MM-DD",
+        default=None,
+        help="起始日期，格式 YYYY-MM-DD（默认：今天往前 365 天，确保覆盖 SMA200 所需的 ~200 个交易日）",
     )
     parser.add_argument(
         "--end",
         type=str,
-        required=True,
-        help="结束日期，格式 YYYY-MM-DD",
+        default=None,
+        help="结束日期，格式 YYYY-MM-DD（默认：今天）",
     )
     parser.add_argument(
         "--tail",
@@ -512,13 +515,18 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # 默认日期窗口：--end 缺省=今天，--start 缺省=今天往前 365 天
+    # （SKILL.md §6 指引：至少需 200 个交易日才能算 SMA200，1 年足够）
+    end_date = args.end if args.end else date.today().isoformat()
+    start_date = args.start if args.start else (date.today() - timedelta(days=365)).isoformat()
+
     if args.raw:
         # 旧行为：整段原始 CSV
-        result = fetch_stock_data(args.symbol, args.start, args.end)
+        result = fetch_stock_data(args.symbol, start_date, end_date)
     else:
         # 默认：精简报告（指标 + 尾部 OHLCV）
         result = build_compact_report(
-            args.symbol, args.start, args.end,
+            args.symbol, start_date, end_date,
             tail=args.tail, indicators=args.indicators, stats=args.stats,
         )
     print(result)
