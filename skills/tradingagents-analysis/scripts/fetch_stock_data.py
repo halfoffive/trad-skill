@@ -20,7 +20,6 @@
 # 返回值：格式化的字符串（适合注入LLM提示词）
 
 import argparse
-import sys
 
 import pandas as pd
 import yfinance as yf
@@ -422,11 +421,20 @@ def build_compact_report(symbol: str, start_date: str, end_date: str, tail: int,
     构建精简报告：OHLCV tail + (可选)统计 + (可选)指标快照。
     替代整段原始 CSV，大幅降低注入提示词的 token 量。
     """
-    # 先拿到完整 DataFrame 用于指标/统计计算（需要历史窗口）
-    df = fetch_stock_df(symbol, start_date, end_date)
+    # 仅触发一次网络请求，拿到完整 CSV 文本
+    csv_text = fetch_stock_data(symbol, start_date, end_date)
+    # 抓取失败直接返回错误信息，避免重复请求
+    if csv_text.startswith("错误"):
+        return csv_text
+    # 解析 CSV 为 DataFrame（指标/统计需要历史窗口）
+    try:
+        from io import StringIO
+
+        df = pd.read_csv(StringIO(csv_text))
+    except Exception:
+        return csv_text
     if df.empty:
-        # 抓取失败，返回原始入口的错误信息
-        return fetch_stock_data(symbol, start_date, end_date)
+        return csv_text
 
     sections: list[str] = [f"# {symbol} 行情（{start_date} 至 {end_date}）\n"]
 
