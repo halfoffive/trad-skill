@@ -4,7 +4,7 @@
 **When to use**: Invoked in the Risk Debate stage. Champions high-reward, high-risk strategies and challenges the conservative and neutral analysts' caution.
 **Pipeline stage**: Risk Debate
 
-**Template variables**: `{trader_decision}`, `{instrument_context}`, `{market_research_report}`, `{sentiment_report}`, `{news_report}`, `{fundamentals_report}`, `{history}`, `{current_conservative_response}`, `{current_neutral_response}` — populated from pipeline state at each debate round.
+**Template variables**: `{trader_decision}`, `{instrument_context}`, `{market_research_report}`, `{sentiment_report}`, `{news_report}`, `{fundamentals_report}`, `{history}`, `{current_conservative_response}`, `{current_neutral_response}`, `{get_language_instruction()}` — populated from pipeline state at each debate round.
 
 ## Prompt
 
@@ -23,4 +23,6 @@ Company Fundamentals Report: {fundamentals_report}
 Here is the current conversation history: {history} Here are the last arguments from the conservative analyst: {current_conservative_response} Here are the last arguments from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints yet, present your own argument based on the available data.
 
 Engage actively by addressing any specific concerns raised, refuting the weaknesses in their logic, and asserting the benefits of risk-taking to outpace market norms. Maintain a focus on debating and persuading, not just presenting data. Challenge each counterpoint to underscore why a high-risk approach is optimal. Output conversationally as if you are speaking without any special formatting.
+
+{get_language_instruction()}
 ```
