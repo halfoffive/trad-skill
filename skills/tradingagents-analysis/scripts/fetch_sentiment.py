@@ -265,6 +265,13 @@ def fetch_sentiment(symbol: str, limit: int = DEFAULT_SENTIMENT_LIMIT) -> str:
     返回:
         综合情绪报告字符串
     """
+    # 契约守卫：非字符串 / 空串 / 纯空白返回错误字符串，不抛异常
+    if not isinstance(symbol, str):
+        return f"错误: 无效的股票代码 {symbol!r}"
+    symbol = symbol.strip()
+    if not symbol:
+        return "错误: 股票代码不能为空"
+
     # 判断是否为A股代码（6位纯数字）
     if symbol.isdigit() and len(symbol) == 6:
         return fetch_cn_sentiment(symbol)

@@ -367,6 +367,9 @@ def fetch_stock_df(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
     统一获取 OHLCV DataFrame（内部用，供指标/统计复用）。
     失败时返回空 DataFrame。
     """
+    # 契约守卫：非字符串 / 空串 / 纯空白返回空 DataFrame，不抛异常
+    if not isinstance(symbol, str) or not symbol.strip():
+        return pd.DataFrame()
     # 去除首尾空格
     symbol = symbol.strip()
     # 复用各市场抓取逻辑，再把 CSV 解析回 DataFrame
@@ -398,8 +401,13 @@ def fetch_stock_data(symbol: str, start_date: str, end_date: str) -> str:
     返回:
         CSV 格式字符串或错误信息
     """
+    # 契约守卫：非字符串 / 空串 / 纯空白返回错误字符串，不抛异常
+    if not isinstance(symbol, str):
+        return f"错误: 无效的股票代码 {symbol!r}"
     # 去除首尾空格
     symbol = symbol.strip()
+    if not symbol:
+        return "错误: 股票代码不能为空"
 
     # 判断是否为加密货币（以 -USD 结尾）
     if symbol.upper().endswith("-USD"):
