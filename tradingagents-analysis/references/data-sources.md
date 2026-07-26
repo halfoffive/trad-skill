@@ -103,7 +103,7 @@ AKShare → yfinance
 yfinance + Google News
 
 ### News (CN)
-Unified news tool (auto-detects market type) → Google News (Chinese) → AKShare news
+AKShare news (stock_news_em / 东方财富) → Google News (Chinese)
 
 ## Configuration
 

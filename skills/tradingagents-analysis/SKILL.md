@@ -81,8 +81,8 @@ Four sub-agents run simultaneously, each producing a structured report:
 | Analyst | Focus | Key inputs |
 |---|---|---|
 | **Market Analyst** | Technical indicators: SMA, EMA, MACD, RSI, Bollinger Bands, ATR, VWMA, MFI | OHLCV + **pre-computed indicators** via `scripts/fetch_stock_data.py` (analyst interprets, does not recompute) |
-| **Sentiment Analyst** | Social and headline sentiment → composite score | StockTwits, Reddit, news headlines via `scripts/fetch_sentiment.py` |
-| **News Analyst** | Company news, global macro, FRED indicators, prediction markets | News feeds via `scripts/fetch_news.py` |
+| **Sentiment Analyst** | Social sentiment → composite score | StockTwits, Reddit (US) / akshare 个股评论+机构参与度 (CN) via `scripts/fetch_sentiment.py` |
+| **News Analyst** | Company news and macro context | Company news via `scripts/fetch_news.py` (FRED / Polymarket / macro: web-search fallback only — not in script) |
 | **Fundamentals Analyst** | Financial statements: balance sheet, cashflow, income statement | Financials via `scripts/fetch_fundamentals.py` |
 
 ### Stage 2 — Research Debate (SEQUENTIAL, 1–3 rounds)
@@ -234,12 +234,12 @@ Helper scripts live in this skill's `scripts/` directory. They fetch, **compact,
 
 | Script | Purpose | Invocation |
 |---|---|---|
-| `fetch_stock_data.py` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). Use `--stats` for return/volatility/52w range; `--raw` for the legacy full-range CSV (token-heavy, avoid). | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats` |
+| `fetch_stock_data.py` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). Use `--stats` for return/volatility/52w range; `--raw` for the legacy full-range CSV (token-heavy, avoid). | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
 | `fetch_news.py` | Company news (US: yfinance + Google News RSS; A股: 东方财富/akshare). Default `--limit 8` per source; all summaries truncated. | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7 --limit 8` |
 | `fetch_fundamentals.py` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `python "<skill>/scripts/fetch_fundamentals.py" --symbol AAPL` |
 | `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit (A股: 机构参与度/akshare). Default `--limit 15`; message/post displays trimmed. | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 15` |
 
-> **Default date window for `fetch_stock_data.py`.** 对 `fetch_stock_data.py`，默认 `--start` 取 trade date 前 1 年、`--end` 取 trade date 当天（至少需 200 个交易日才能算 SMA200）。
+> **Default date window for `fetch_stock_data.py`.** 对 `fetch_stock_data.py`，若未传 `--start`/`--end`，脚本默认取今天往前 1 年到今天（至少需 200 个交易日才能算 SMA200）；如需分析历史交易日，请显式传 `--start`/`--end`。
 
 For the full catalog of data sources, APIs, and fallback strategies, see `references/data-sources.md`.
 

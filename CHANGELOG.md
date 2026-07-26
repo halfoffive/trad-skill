@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-07-25
+
+### Fixed (round 3)
+
+- **`fetch_stock_data.py` `--start`/`--end` 与文档默认值矛盾**：argparse 设为 `required=True`，但 SKILL.md §6 L242 文档说有默认值（"默认 `--start` 取 trade date 前 1 年"）。代理按文档省略参数时 argparse 直接拒绝运行。改为可选：`--end` 默认今天、`--start` 默认今天往前 365 天（覆盖 SMA200 所需 ~200 个交易日）。SKILL.md §6 L242 同步改写为"若未传则脚本默认取今天往前 1 年到今天；如需分析历史交易日，请显式传"。
+- **`fetch_cn_sentiment` 全部数据源失败时返回裸 `<unavailable>`**：Round 1 修复了 US 分支的裸 `<unavailable>`（用 `> 数据源不可用` 友好块包裹），但 CN 分支被遗漏 —— `fetch_cn_sentiment` 在 `has_data == False` 时 `return "<unavailable>"`，丢弃已构建的结构化错误块。改为返回累积的 `sections`（含 `> akshare 未安装，跳过` / `> 获取失败` 等）+ `> A 股情绪数据源全部不可用` 汇总。
+- **`data-sources.md` CN 新闻降级链顺序反了**：文档写 `Google News (Chinese) → AKShare news`，但 `fetch_cn_news` 实际是 AKShare 优先（`stock_news_em` / 东方财富）、Google News 兜底。改为 `AKShare news (stock_news_em / 东方财富) → Google News (Chinese)`。
+- **SKILL.md §3 News Analyst 过度声称**：表格 "Key inputs" 列声称 `fetch_news.py` 提供 "global macro, FRED indicators, prediction markets"，但脚本只抓公司新闻。Round 2 修了 §6 但漏了 §3。改为 "Company news via `fetch_news.py` (FRED / Polymarket / macro: web-search fallback only — not in script)"。
+- **`install.mjs` L97 过时注释**：注释说 "若不存在则回退到 ~/.agents/skills"，但代码无任何回退逻辑。删除误导性半句，保留 `// 默认 Claude Code`。
+- **SKILL.md §3 Sentiment Analyst 过度声称 "news headlines"**：`fetch_sentiment.py` 只做 StockTwits+Reddit（US）和 akshare 个股评论+机构参与度（CN），不抓 news headlines。Focus 列改为 "Social sentiment → composite score"，Key inputs 列改为 "StockTwits, Reddit (US) / akshare (CN) via `fetch_sentiment.py`"。
+- **SKILL.md §6 示例时间窗口短于 SMA200 所需**：示例 `--start 2024-01-01 --end 2024-06-30`（6 个月）与 L242 "至少需 200 个交易日才能算 SMA200"（≈10 个月）矛盾。扩到 1 年：`--start 2023-07-01 --end 2024-06-30`。
+- **`fetch_stock_data.py` 负数 `--tail` 触发未捕获 ValueError**：`build_compact_report` 中 `df.tail(tail)` 在 tail 为负时抛 ValueError，向上传播到 CLI 导致脚本崩溃，违反 AGENTS.md "never raises" 契约。入口处加 `tail = max(0, int(tail))` 钳制。
+- **`prompts/README.md` 未文档化工具名 override**：`market_analyst.md` 等 verbatim 提示词引用 `get_stock_data` / `get_indicators` / `get_verified_market_snapshot`（不存在），SKILL.md §4 与 `indicators.md` 已有 override 但 `prompts/README.md` 未说明。新增 "Tool-Name Override" 章节解释映射关系，不改 verbatim prompt 本身。
+
+### Changed
+
+- `package.json` `version`: `1.3.1` → `1.3.2`。
+
 ## [1.3.1] - 2026-07-25
 
 ### Fixed (round 1, commit 7c958ec — previously undocumented)

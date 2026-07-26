@@ -94,7 +94,7 @@ if (args.dir) {
   parentDir = AGENT_DIRS[args.agent];
   if (!parentDir) fail(`未知 --agent 值：${args.agent}（可选：claude | agents | opencode）`);
 } else {
-  // 默认 Claude Code；若不存在则回退到 ~/.agents/skills
+  // 默认 Claude Code
   parentDir = AGENT_DIRS.claude;
 }
 
