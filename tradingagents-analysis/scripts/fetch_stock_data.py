@@ -93,18 +93,33 @@ def compute_indicators(df: pd.DataFrame) -> str:
         signal = macd.ewm(span=9, adjust=False).mean()
         hist = macd - signal
 
-        # RSI(14)：Wilder 平滑法
+        # RSI(14)：Wilder 平滑法的 pandas ewm 简化实现
+        # 注：pandas ewm(adjust=False, alpha=1/14) 的递推种子是 gain[0]，标准 Wilder RSI
+        # 的种子是 mean(gain[1:15])（前 14 期 SMA）。两者偏差约 1pp，接近 30/70 阈值时
+        # 需结合其他指标交叉验证。完整 Wilder 实现需 O(n) 循环或复杂向量化，此处取舍
+        # token 简洁度采用 ewm 近似（pandas 社区常见做法）。
         delta = close.diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
         avg_gain = gain.ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
         avg_loss = loss.ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
-        rs = avg_gain / avg_loss.replace(0, pd.NA)
-        rsi = 100 - 100 / (1 + rs)
+        # RSI 计算：处理 avg_loss == 0 的边缘情况（持续上涨 14+ 期）
+        # 旧实现 avg_loss.replace(0, pd.NA) 让 -0.0 也变 NA（因 -0.0 == 0 为 True），
+        # 导致持续上涨时 RSI=NA（应为 100）。改用显式分支：avg_loss==0 时 RSI=100。
+        rs = avg_gain / avg_loss  # 0/0 -> NaN，非零/0 -> inf，由下方 mask 覆盖
+        rsi = pd.Series(float("nan"), index=close.index)
+        mask_zero_loss = avg_loss == 0  # 含 0.0 与 -0.0
+        # avg_loss==0 且 avg_gain>0：持续上涨，RSI=100
+        rsi[mask_zero_loss] = 100.0
+        # avg_loss!=0：标准 RSI 公式
+        mask_nonzero = ~mask_zero_loss
+        rsi[mask_nonzero] = 100 - 100 / (1 + rs[mask_nonzero])
 
-        # Bollinger(20, 2)
+        # Bollinger(20, 2)：用 ddof=0（总体标准差），与 StockCharts/TradingView 一致
+        # 注：pandas rolling().std() 默认 ddof=1（样本标准差，除以 n-1），传统布林带用
+        # ddof=0（总体标准差，除以 n）。ddof=1 会让上下轨偏宽约 2.6%，边界情况可能误判突破。
         boll_mid = close.rolling(20).mean()
-        boll_std = close.rolling(20).std()
+        boll_std = close.rolling(20).std(ddof=0)
         boll_ub = boll_mid + 2 * boll_std
         boll_lb = boll_mid - 2 * boll_std
 
@@ -275,6 +290,10 @@ def fetch_cn_stock_data(symbol: str, start_date: str, end_date: str) -> str:
     返回:
         CSV 格式字符串或错误信息
     """
+    # 契约守卫：start_date/end_date 必须是字符串（ak_start = start_date.replace(...) 在 try 块外，
+    # None/非字符串会抛 AttributeError 穿透函数边界，违反 never raises 契约）
+    if not isinstance(start_date, str) or not isinstance(end_date, str):
+        return f"错误: 日期参数无效 start_date={start_date!r} end_date={end_date!r}"
     # 将日期格式从 YYYY-MM-DD 转为 akshare 需要的 YYYYMMDD
     ak_start = start_date.replace("-", "")
     ak_end = end_date.replace("-", "")
@@ -328,6 +347,10 @@ def fetch_hk_stock_data(symbol: str, start_date: str, end_date: str) -> str:
     返回:
         CSV 格式字符串或错误信息
     """
+    # 契约守卫：start_date/end_date 必须是字符串（与 fetch_cn_stock_data 一致，
+    # 防止 None/非字符串在 try 块外抛 AttributeError 穿透函数边界）
+    if not isinstance(start_date, str) or not isinstance(end_date, str):
+        return f"错误: 日期参数无效 start_date={start_date!r} end_date={end_date!r}"
     # 将日期格式从 YYYY-MM-DD 转为 akshare 需要的 YYYYMMDD
     ak_start = start_date.replace("-", "")
     ak_end = end_date.replace("-", "")
