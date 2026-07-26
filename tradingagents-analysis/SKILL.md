@@ -211,7 +211,7 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 ### Stage 4: Trader
 
 - **Data**: the investment plan.
-- **Prompt**: `references/prompts/trader.md`.
+- **Prompt**: `references/prompts/trader.md`. **Note (R6-25):** `trader.md` has separate `## System Message` and `## User Message` code blocks — construct the LLM call with both roles (system message = the System Message block, user message = the User Message block with `{research_plan}` / `{lessons_line}` substituted). Do not concatenate them into a single prompt.
 - **Output**: a transaction proposal with entry/exit levels, position sizing, and time horizon.
 - **Handoff**: the proposal goes to the Risk Debate.
 
@@ -236,7 +236,7 @@ Helper scripts live in this skill's `scripts/` directory. They fetch, **compact,
 
 | Script | Purpose | Invocation |
 |---|---|---|
-| `fetch_stock_data.py` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). Use `--stats` for return/volatility/52w range; `--raw` for the legacy full-range CSV (token-heavy, avoid). | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
+| `fetch_stock_data.py` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). Flags: `--indicators`/`--no-indicators` (default on), `--stats`/`--no-stats` (default off), `--raw` (legacy full-range CSV, token-heavy, avoid), `--tail N` (default 30). | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
 | `fetch_news.py` | Company news (US: yfinance + Google News RSS; A股: 东方财富/akshare). Default `--limit 8` per source; all summaries truncated. | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7 --limit 8` |
 | `fetch_fundamentals.py` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `python "<skill>/scripts/fetch_fundamentals.py" --symbol AAPL` |
 | `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit (A股: 机构参与度/akshare). Default `--limit 15`; message/post displays trimmed. | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 15` |
