@@ -152,6 +152,10 @@ def fetch_us_fundamentals(symbol: str) -> str:
 
     # 创建 Ticker 对象 + 获取公司概况信息（紧凑）
     # yf.Ticker 对空串会抛 ValueError，需包在 try/except 内（与 fetch_us_stock_data 一致）
+    # 预声明 ticker=None：若 yf.Ticker(symbol) 抛异常（网络瞬断/rate limit/无效 symbol），
+    # ticker 永不赋值，后续三大报表 try 块引用 ticker.financials 会抛 NameError 被各自 except
+    # 捕获后置 None —— 看似"无数据"，实则掩盖了公司概况的网络失败。预声明 + 短路让失败原因清晰。
+    ticker = None
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.info
@@ -175,18 +179,24 @@ def fetch_us_fundamentals(symbol: str) -> str:
         sections.append(f"## 公司概况\n\n> 获取失败: {e}\n")
 
     # 取三大报表（不整表倾倒，只用于抽关键行项）
-    try:
-        financials = ticker.financials
-    except Exception:
+    # 若 ticker 创建失败（None），直接短路，避免引用未定义的 ticker 触发 NameError
+    if ticker is None:
         financials = None
-    try:
-        balance = ticker.balance_sheet
-    except Exception:
         balance = None
-    try:
-        cashflow = ticker.cashflow
-    except Exception:
         cashflow = None
+    else:
+        try:
+            financials = ticker.financials
+        except Exception:
+            financials = None
+        try:
+            balance = ticker.balance_sheet
+        except Exception:
+            balance = None
+        try:
+            cashflow = ticker.cashflow
+        except Exception:
+            cashflow = None
 
     # 关键指标表
     try:
