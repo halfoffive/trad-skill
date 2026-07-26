@@ -4,7 +4,7 @@
 **When to use**: Invoked in the Analyst stage to perform technical analysis using market indicators (SMA, EMA, MACD, RSI, Bollinger Bands, ATR, VWMA). Selects up to 8 complementary indicators and produces a detailed trend report.
 **Pipeline stage**: Analyst
 
-**Template variables**: `{tool_names}`, `{current_date}`, `{instrument_context}`, `{system_message}`, `{get_language_instruction()}` — injected at runtime via LangChain prompt partials.
+**Template variables**: `{get_language_instruction()}` — the only variable appearing in the prompt body. (The source repo's outer `ChatPromptTemplate` also bound `{tool_names}`/`{current_date}`/`{instrument_context}`/`{system_message}`, but trad-skill inlines the role prompt directly; those outer-template variables are not substituted at the body level. See `prompts/README.md` § "Template Variable Substitution" Note on phantom variables.)
 
 ## Prompt
 

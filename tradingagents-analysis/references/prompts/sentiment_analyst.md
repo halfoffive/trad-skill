@@ -4,7 +4,7 @@
 **When to use**: Invoked in the Analyst stage to produce a multi-source sentiment report. Pre-fetches Yahoo Finance news, StockTwits messages, and Reddit posts, then analyzes cross-source divergences and produces a structured sentiment score.
 **Pipeline stage**: Analyst
 
-**Template variables**: `{ticker}`, `{start_date}`, `{end_date}`, `{news_block}`, `{stocktwits_block}`, `{reddit_block}`, `{current_date}`, `{instrument_context}`, `{get_language_instruction()}` — the data blocks are pre-fetched and injected into the prompt before LLM invocation.
+**Template variables**: `{ticker}`, `{start_date}`, `{end_date}`, `{news_block}`, `{stocktwits_block}`, `{reddit_block}`, `{get_language_instruction()}` — the data blocks are pre-fetched and injected into the prompt before LLM invocation. (The source repo's outer `ChatPromptTemplate` also bound `{current_date}`/`{instrument_context}`, but those do not appear in the extracted body and are not substituted at the body level. See `prompts/README.md` § "Template Variable Substitution" Note on phantom variables.)
 
 ## Prompt
 

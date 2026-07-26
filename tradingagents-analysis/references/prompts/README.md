@@ -66,10 +66,10 @@ The table below defines the substitution for every variable found across `refere
 | Variable | Substitute with |
 |---|---|
 | `{ticker}` | The ticker symbol (e.g. `AAPL`, `600519`, `0700.HK`, `BTC-USD`). |
-| `{target_label}` | The ticker symbol (used in bull/bear prompts as the debate subject). |
-| `{asset_label}` | The ticker symbol (used in news_analyst). |
+| `{target_label}` | The literal word `stock` for equities (US/CN/HK) or `asset` for crypto (`-USD` tickers). Used in bull/bear prompts as the debate subject noun (e.g. "advocating for investing in the {target_label}" → "advocating for investing in the stock"). Matches source `bull_researcher.py:20` / `bear_researcher.py:24`. |
+| `{asset_label}` | The literal word `company` for equities or `asset` for crypto. Used in `news_analyst.md` (e.g. "for {asset_label}-specific news" → "for company-specific news"). Matches source `news_analyst.py:17`. |
 | `{company_name}` | The company name if known from `fetch_fundamentals.py` profile (`longName`); otherwise the ticker. |
-| `{fundamentals_label}` | The literal string `Fundamentals` (section label in bull/bear prompts). |
+| `{fundamentals_label}` | The full label string `Company fundamentals report` for equities, or `Asset fundamentals report (may be unavailable for crypto)` for crypto. Used as a section header in bull/bear prompts (e.g. "{fundamentals_label}: {fundamentals_report}"). Matches source `bull_researcher.py:22-25` / `bear_researcher.py:26-29`. |
 
 ### Dates
 
@@ -84,11 +84,15 @@ The table below defines the substitution for every variable found across `refere
 | Variable | Substitute with |
 |---|---|
 | `{instrument_context}` | A one-line market context: `Market: <US / A股 / 港股 / Crypto>; Ticker: <symbol>; Trade date: <YYYY-MM-DD>` (and company name if known). |
-| `{get_language_instruction()}` | `Respond in <English / 中文> per output_language.` (default: match user's language; see SKILL.md §8). |
+| `{get_language_instruction()}` | English (default): **empty string** (no instruction injected — matches source `agent_utils.py:52-65`). Non-English: ` Write your entire response in <lang>.` (note the leading space, matching source). trad-skill does **not** inject any "Respond in English" string when the language is English, to stay verbatim-faithful to the source behavior. |
 | `{tool_names}` | Empty string, or `python <skill>/scripts/<script>.py` for the analyst's assigned script. The script is the only tool. |
 | `{system_message}` | Empty string (no separate system message; the role prompt itself is the system message). |
 | `{NO_EXTERNAL_TOOLS}` | Empty string — **not** set. The spawn template permits web-search / browser fallback when a script fails or returns no data. (Setting it would conflict with the fallback policy.) |
 | `{lessons_line}` | Empty string (this skill does not maintain a lessons-learned line between runs). |
+
+> **Note on `{instrument_context}` (R6-11).** trad-skill uses a compact one-line market context for token efficiency. The source repo's `build_instrument_context` (`agent_utils.py:122-169`) produces a fuller paragraph that emphasizes ticker preservation and identity anchoring (anti-hallucination wording added in source #814). trad-skill intentionally drops this anti-hallucination wording to save tokens; agents should rely on SKILL.md §2 (confirm the ticker first) as the anti-hallucination gate. If you observe ticker/company confusion in analyst output, consider expanding `{instrument_context}` to include the source's full paragraph.
+
+> **Note on whitespace before `{get_language_instruction()}` (R6-24).** trad-skill normalizes the whitespace immediately before `{get_language_instruction()}` to a single blank line for readability. The source repo concatenates `+ get_language_instruction()` directly after the prompt string (no blank line). When English (empty substitution), this results in a trailing blank line in trad-skill vs. no trailing blank line in source — cosmetically different but semantically identical. For non-English, the blank line + leading space in the substituted string produces clean paragraph separation.
 
 ### Data reports (bound to stage outputs)
 

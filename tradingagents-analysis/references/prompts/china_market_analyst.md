@@ -4,7 +4,7 @@
 **When to use**: Invoked in the Analyst stage (CN-specific) to analyze A-shares, HK stocks, and Chinese capital markets. Uses Tushare data for technical indicators and incorporates China-specific market mechanics (T+1, price limits, ST stocks, etc.).
 **Pipeline stage**: Analyst (CN-specific)
 
-**Template variables**: `{tool_names}`, `{current_date}`, `{ticker}`, `{system_message}` — injected at runtime via LangChain prompt partials.
+**Template variables**: (none — body is static text with no LangChain variables. The source repo's outer `ChatPromptTemplate` wrapper used `{tool_names}`/`{current_date}`/`{ticker}`/`{system_message}`, but trad-skill inlines the role prompt directly; those outer-template variables are not substituted at the body level. See `prompts/README.md` § "Template Variable Substitution" Note on phantom variables.)
 
 ## Prompt
 
