@@ -227,8 +227,13 @@ def fetch_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -> s
     返回:
         markdown 格式新闻字符串
     """
+    # 契约守卫：非字符串 / 空串 / 纯空白返回错误字符串，不抛异常
+    if not isinstance(symbol, str):
+        return f"错误: 无效的股票代码 {symbol!r}"
     # 去除首尾空格
     symbol = symbol.strip()
+    if not symbol:
+        return "错误: 股票代码不能为空"
 
     # 判断是否为A股（6位纯数字）
     if symbol.isdigit() and len(symbol) == 6:
