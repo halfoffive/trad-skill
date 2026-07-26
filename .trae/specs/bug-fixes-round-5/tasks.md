@@ -116,4 +116,33 @@
 
 ## Status
 
-待实施。
+### 已完成（commit by commit）
+
+- Task 1 (R5-1, HIGH): 9 个非 CN prompt 补 `{get_language_instruction()}` — commit `bab0ad7`
+- Task 2 (R5-2, HIGH): 3 个脚本入口补 None 守卫 — commit `f3eb12f`
+- Task 3 (R5-12, LOW): `fetch_stock_df` 补 None 守卫 — commit `f3eb12f`（与 Task 2 合并）
+- Task 4 (R5-11, LOW): `_fmt_num` 统一 NA 处理（`v is None or pd.isna(v)`）— 待提交
+- Task 5 (R5-3, MEDIUM): `prepublishOnly` 脚本 + `files` 否定项 `!**/__pycache__/**` — 待提交
+- Task 6 (R5-4, MEDIUM): `install.mjs` `path.resolve` 修绝对路径 — 待提交
+- Task 7 (R5-6, MEDIUM): `install.mjs` `mkdirSync` 移入 try/catch — 待提交
+- Task 8 (R5-14, LOW): `install.mjs` `--dir` + `--agent` 互斥 — 待提交
+- Task 9 (R5-5, MEDIUM): `README_CN` `.SS`/`.SZ` 残留 — 待提交
+- Task 10 (R5-8, LOW): `README` 相对链接 404 — 待提交
+- Task 11 (R5-9, LOW): `prompts/README` `{investment_plan}` 流向 — 待提交
+- Task 12 (R5-10, LOW): `prompts/README` CN prompt 归因 — 待提交
+- Task 13 (R5-7, LOW): `CHANGELOG` "9 ghost tools" → 11 — 待提交
+- Task 14 (R5-13, LOW): `.npmignore` 补 `node_modules` + `CLAUDE.md` — 待提交
+- Task 15: 版本号 1.3.4 → 1.3.5 + `CHANGELOG` 新增 `## [1.3.5]` 章节 — 待提交
+- Task 16: 双拷贝同步最终验证 — `git diff --no-index --quiet tradingagents-analysis skills/tradingagents-analysis` 退出码 0 ✓
+- Task 17: 验证套件 `verify_round5.py`（74/74 通过）+ PR — 进行中
+
+### 验证结果
+
+`uv run --with pandas --with numpy --with requests --with yfinance --with akshare python .trae/specs/bug-fixes-round-5/verify_round5.py`
+
+```
+Total: 74, Passed: 74, Failed: 0
+ALL OK
+```
+
+覆盖 14 个 R5 BUG + round-4 回归（fetch_fundamentals None/空串守卫）。
