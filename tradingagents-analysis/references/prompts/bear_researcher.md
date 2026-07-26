@@ -4,7 +4,7 @@
 **When to use**: Invoked in the Research Debate stage. Argues the bear case against investing, highlighting risks and countering the bull analyst's points with evidence from all analyst reports.
 **Pipeline stage**: Research Debate
 
-**Template variables**: `{target_label}` (stock/asset), `{instrument_context}`, `{market_research_report}`, `{sentiment_report}`, `{news_report}`, `{fundamentals_label}`, `{fundamentals_report}`, `{history}`, `{current_response}` — populated from pipeline state at each debate round.
+**Template variables**: `{target_label}` (stock/asset), `{instrument_context}`, `{market_research_report}`, `{sentiment_report}`, `{news_report}`, `{fundamentals_label}`, `{fundamentals_report}`, `{history}`, `{current_response}`, `{get_language_instruction()}` — populated from pipeline state at each debate round.
 
 ## Prompt
 
@@ -29,4 +29,6 @@ Latest world affairs news: {news_report}
 Conversation history of the debate: {history}
 Last bull argument: {current_response}
 Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the {target_label}.
+
+{get_language_instruction()}
 ```

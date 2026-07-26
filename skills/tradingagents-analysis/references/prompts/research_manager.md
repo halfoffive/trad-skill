@@ -4,7 +4,7 @@
 **When to use**: Invoked after the bull/bear debate concludes. Evaluates the debate and produces a structured investment plan with a rating (Buy/Overweight/Hold/Underweight/Sell) for the trader.
 **Pipeline stage**: Decision
 
-**Template variables**: `{instrument_context}`, `{history}` (debate transcript), `{NO_EXTERNAL_TOOLS}` — populated from pipeline state.
+**Template variables**: `{instrument_context}`, `{history}` (debate transcript), `{NO_EXTERNAL_TOOLS}`, `{get_language_instruction()}` — populated from pipeline state.
 
 ## Prompt
 
@@ -29,5 +29,5 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
 **Debate History:**
 {history}
 
-{NO_EXTERNAL_TOOLS}
+{NO_EXTERNAL_TOOLS}{get_language_instruction()}
 ```
