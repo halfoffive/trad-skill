@@ -9,14 +9,13 @@
 依赖: pip install yfinance akshare pandas
 
 降本增效设计：
-- 不再用 to_markdown() 倾倒 4 年×全部行项的宽表（数十行，token 开销大）。
+- 不再用整表倾倒 4 年×全部行项的宽表（数十行，token 开销大）。
 - 改为输出精挑细选的关键指标表（营收/净利润/EPS/总资产/总负债/
   经营现金流/自由现金流/毛利率/净利率 + 营收与净利 YoY），约 10 行。
 - 公司概况块保留（已紧凑）。
 """
 
 import argparse
-import sys
 
 import yfinance as yf
 import pandas as pd
@@ -39,13 +38,13 @@ def _fmt_num(v) -> str:
 
 
 def _yoy(series: pd.Series) -> str:
-    """计算序列最早可得的前后两年同比变化（百分比）。"""
+    """计算序列最近一年的同比变化（百分比）。"""
     try:
         vals = pd.to_numeric(series, errors="coerce").dropna()
         if len(vals) < 2:
             return "N/A"
-        prev = vals.iloc[-2]
-        cur = vals.iloc[-1]
+        cur = vals.iloc[0]
+        prev = vals.iloc[1]
         if not prev:
             return "N/A"
         return f"{round((cur / prev - 1) * 100, 2)}%"
@@ -223,7 +222,7 @@ def fetch_cn_fundamentals(symbol: str) -> str:
                 sections.append("## 财务分析指标（最近 4 期，精简）\n")
                 # 取最近 4 行，且最多 6 列
                 recent = df_indicator.tail(4).iloc[:, :6]
-                sections.append(recent.to_markdown(index=False))
+                sections.append(recent.to_string(index=False))
                 sections.append("")
             else:
                 sections.append("## 财务分析指标\n\n> 无数据\n")
@@ -242,7 +241,7 @@ def fetch_cn_fundamentals(symbol: str) -> str:
                 sections.append("## 个股基本信息（精简）\n")
                 # 只取前 10 行避免长表
                 recent = df_info.head(10)
-                sections.append(recent.to_markdown(index=False))
+                sections.append(recent.to_string(index=False))
                 sections.append("")
             else:
                 sections.append("## 个股基本信息\n\n> 无数据\n")

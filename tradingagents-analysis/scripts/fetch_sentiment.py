@@ -10,7 +10,6 @@
 """
 
 import argparse
-import sys
 
 import requests
 
@@ -215,7 +214,7 @@ def fetch_cn_sentiment(symbol: str) -> str:
                 sections.append("## 个股评论\n")
                 # 展示最近的评论数据
                 recent = df_comment.head(10)
-                sections.append(recent.to_markdown(index=False))
+                sections.append(recent.to_string(index=False))
                 sections.append("")
             else:
                 sections.append("## 个股评论\n\n> 无数据\n")
@@ -234,7 +233,7 @@ def fetch_cn_sentiment(symbol: str) -> str:
                 sections.append("## 机构参与度\n")
                 # 展示最近的机构参与度数据
                 recent = df_detail.head(10)
-                sections.append(recent.to_markdown(index=False))
+                sections.append(recent.to_string(index=False))
                 sections.append("")
             else:
                 sections.append("## 机构参与度\n\n> 无数据\n")

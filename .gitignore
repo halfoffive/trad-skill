@@ -1,12 +1,18 @@
 # OpenCode orchestration state
 .omo/
 
+# Tooling / indexing state
+.codegraph/
+
 # Python
 __pycache__/
 *.pyc
 *.pyo
 .venv/
 venv/
+
+# Node (install.mjs is zero-dep today; future-proof)
+node_modules/
 
 # OS
 .DS_Store

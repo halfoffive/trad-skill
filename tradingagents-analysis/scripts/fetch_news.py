@@ -19,7 +19,6 @@
 # 返回值：markdown 格式的字符串（适合注入LLM提示词）
 
 import argparse
-import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus

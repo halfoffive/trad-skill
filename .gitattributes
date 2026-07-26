@@ -1,0 +1,12 @@
+# Normalize line endings to LF in the repo and working tree.
+# Prevents CRLF/LF drift between the two tradingagents-analysis/ copies
+# and cross-platform contribution noise.
+* text=auto eol=lf
+
+# Binary files (none currently, but explicit for safety)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.ico binary

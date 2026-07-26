@@ -24,10 +24,27 @@ const AGENT_DIRS = {
 function parseArgs(argv) {
   const out = { dir: null, agent: null };
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === '--dir') out.dir = argv[++i];
-    else if (a === '--agent') out.agent = argv[++i];
-    else if (a === '-h' || a === '--help') out.help = true;
+    let a = argv[i];
+    let inline = null;
+    const eq = a.indexOf('=');
+    if (eq > 0 && a.startsWith('--')) {
+      inline = a.slice(eq + 1);
+      a = a.slice(0, eq);
+    }
+    if (a === '--dir') {
+      const v = inline !== null ? inline : argv[++i];
+      if (v === undefined || v === '' || v.startsWith('--')) fail('--dir 需要一个路径参数');
+      out.dir = v;
+    } else if (a === '--agent') {
+      const v = inline !== null ? inline : argv[++i];
+      if (v === undefined || v === '' || v.startsWith('--')) fail('--agent 需要一个名称（claude|agents|opencode）');
+      if (!AGENT_DIRS[v]) fail(`未知 --agent: ${v} (支持: ${Object.keys(AGENT_DIRS).join('|')})`);
+      out.agent = v;
+    } else if (a === '-h' || a === '--help') {
+      out.help = true;
+    } else {
+      fail(`未知参数：${a}`);
+    }
   }
   return out;
 }
@@ -68,6 +85,10 @@ if (!fs.existsSync(srcSkill)) {
 // 确定目标父目录
 let parentDir;
 if (args.dir) {
+  // 展开 ~ 为 home 目录
+  if (args.dir === '~') args.dir = home;
+  else if (args.dir.startsWith('~/')) args.dir = path.join(home, args.dir.slice(2));
+  else if (args.dir.startsWith('~\\')) args.dir = path.join(home, args.dir.slice(2));
   parentDir = args.dir;
 } else if (args.agent) {
   parentDir = AGENT_DIRS[args.agent];
@@ -83,11 +104,17 @@ const destDir = path.join(parentDir, SKILL_NAME);
 fs.mkdirSync(parentDir, { recursive: true });
 
 // 幂等：先删旧目录再复制
-if (fs.existsSync(destDir)) {
-  fs.rmSync(destDir, { recursive: true, force: true });
+try {
+  if (fs.existsSync(destDir)) {
+    fs.rmSync(destDir, { recursive: true, force: true });
+  }
+  fs.cpSync(SRC_DIR, destDir, {
+    recursive: true,
+    filter: (src) => path.basename(src) !== '__pycache__',
+  });
+} catch (e) {
+  fail(`安装失败：${e.message}`);
 }
-
-fs.cpSync(SRC_DIR, destDir, { recursive: true });
 
 const scriptsDir = path.join(destDir, 'scripts');
 console.log(`✓ 已安装 ${SKILL_NAME} → ${destDir}`);
