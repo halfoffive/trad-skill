@@ -141,7 +141,7 @@ The agent will orchestrate the full pipeline and produce a structured investment
 | `max_debate_rounds` | 1-3 | 1 | Bull/bear exchanges in the Research Debate |
 | `max_risk_discuss_rounds` | 1-3 | 1 | Risk analyst exchanges in the Risk Debate |
 | `output_language` | English / Chinese | match user | Language for all reports |
-| `market` | auto-detect | ... | Detected from ticker suffix |
+| `market` | auto-detect | — | Detected from ticker suffix |
 
 Market auto-detection: 6-digit pure number (e.g., 600519, 000858) → A-shares, `.HK` means HK stocks, `-USD` means Crypto, everything else defaults to US stocks.
 

@@ -104,7 +104,9 @@ if (args.dir) {
   parentDir = AGENT_DIRS.claude;
 }
 
-const destDir = path.join(parentDir, SKILL_NAME);
+// 用 path.resolve 而非 path.join：--dir ./foo 相对路径时 destDir 也是绝对路径，
+// 与下方 scriptsDir 输出一致，避免 L126 显示相对路径误导用户（R6-28）
+const destDir = path.resolve(parentDir, SKILL_NAME);
 
 // 幂等：先删旧目录再复制（含 mkdirSync 父目录创建，统一在 try/catch 内）
 // 旧版本 mkdirSync 在 try/catch 之外，权限不足 / 路径非法时会抛裸 Node 堆栈；
