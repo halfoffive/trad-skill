@@ -66,6 +66,7 @@ Prompts and methodology are distilled from these. When updating prompts, re-extr
 
 - `.omo/` is gitignored orchestration state — never commit it.
 - `.codegraph/` exists for indexing — ignore it.
+- `.trae/specs/` is the trae agent spec workflow state (spec.md / tasks.md / checklist.md), tracked in git; unlike `.omo/`, do NOT gitignore.
 - `uv` is available with bundled Python; use `uv run python` for script checks.
 - No `requirements.txt` by design — deps are documented in README only.
 - Skill files live in `tradingagents-analysis/` subfolder — repo root is for meta files only.
