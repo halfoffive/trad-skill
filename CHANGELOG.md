@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.5] - 2026-07-26
+
+### Fixed (round 5)
+
+- **9 个非 CN prompt 缺 `{get_language_instruction()}`**：源仓库 TradingAgents 在 12 个非 CN prompt 末尾都有 `+ get_language_instruction()`，本 skill 早期只把 3 个（sentiment_analyst / trader / portfolio_manager）转成模板变量，其余 9 个被剥离。这同时是 verbatim 违反（AGENTS.md "Do NOT paraphrase"）和功能性 bug：`output_language` 配置只对 3/12 非 CN 子代理生效，其余 9 个永远收不到 "Respond in <language>" 指令。在 market_analyst / news_analyst / fundamentals_analyst / bull_researcher / bear_researcher / research_manager / aggressive_risk / conservative_risk / neutral_risk 的 prompt body 末尾（closing ``` 前）补 `{get_language_instruction()}`，front-matter "Template variables" 行同步更新。CN prompts 正确地不含此变量（源 CN 仓库没有）。
+- **`fetch_news(None)` / `fetch_stock_data(None,...)` / `fetch_sentiment(None)` 抛 AttributeError**：round-4 已硬化 `fetch_fundamentals`，但另外 3 个统一入口和内部 helper `fetch_stock_df` 仍直接调 `symbol.strip()`/`symbol.upper()`，主代理跳过某 ticker 传 None 时抛 AttributeError，违反 "never raises, returns a string" 契约。镜像 fetch_fundamentals 模式：入口加 `isinstance(symbol, str)` + `strip()` + 空串守卫返回错误字符串；`fetch_stock_df` 同守卫返回空 DataFrame（其文档化失败模式）。
+- **`npm pack` 把 `__pycache__/*.pyc` 打进 tarball**：`package.json` `files` allowlist 包含 `tradingagents-analysis/` 和 `skills/` 目录，npm 11 实测在 `files` 存在时根目录 `.npmignore` 不会从 allowlist 中再减项（与 agentsync #120 报告一致）。在 `files` 内追加 `!**/__pycache__/**` / `!**/*.pyc` / `!**/*.pyo` 否定项；同时加 `prepublishOnly` 脚本，发布前清理两份 `scripts/__pycache__`（防御性，确保 `npm publish` 时即使有残留 .pyc 也不会进入 tarball）。
+- **`install.mjs` `--dir` 相对路径打印相对路径**：L130 `path.join(scriptsDir, s)` 在 `--dir ./foo` 时输出 `./foo/tradingagents-analysis/scripts/fetch_stock_data.py`，子代理 CWD 不在仓库根会找不到。改为 `path.resolve(scriptsDir, s)`，始终打印绝对路径，并用 `/` 分隔便于跨平台复制粘贴。
+- **`install.mjs` `mkdirSync` 在 try/catch 之外**：L104 `fs.mkdirSync(parentDir, { recursive: true })` 在权限不足 / 路径非法时抛裸 Node 堆栈。移入 L107 既有 try/catch，走 `fail()` 友好提示。
+- **`install.mjs` `--dir` + `--agent` 互斥未检查**：同时指定时静默走 `--agent` 分支，`--dir` 被忽略，用户期望装到 `--dir` 却装到 `~/.config/opencode/skills`。加 `if (args.dir && args.agent) fail('不能同时指定 --dir 和 --agent')`。
+- **`README_CN.md` A股说明 `.SS`/`.SZ` 残留**：L129 仍写 "`.SS` 后缀为上海，`.SZ` 后缀为深圳"，与 round-2 已统一的"6 位纯数字 → A股"规则矛盾（用户不需要也不应该手动加后缀）。改为 "脚本内部根据 6 位代码前缀自动判断交易所（6 开头 → 上海 .SS；0/3 开头 → 深圳 .SZ），用户只需提供 6 位纯数字"。
+- **`README.md` / `README_CN.md` 相对链接 404**：两份 README 的数据源章节用 `[references/data-sources.md](references/data-sources.md)` 相对链接，但 README 在仓库根，目标实际在 `tradingagents-analysis/references/data-sources.md`，GitHub 渲染 404。改为 `tradingagents-analysis/references/data-sources.md`。
+- **`prompts/README.md` `{investment_plan}` 流向错误**：L104 写 "Research Manager output → Trader input + Risk Debate input"，但 Risk Debate 接收的是 `{trader_decision}`/`{trader_plan}`（L105 已正确），不接收 `{investment_plan}`。改为 "Research Manager output → Trader input. (Risk Debate does NOT receive `{investment_plan}` — it receives `{trader_decision}`/`{trader_plan}` per the row below.)"
+- **`prompts/README.md` Tool-Name Override 章节未标注 CN prompt 不引用 ghost tools**：L126 / L132 标题写 `market_analyst.md / china_market_analyst.md`、`news_analyst.md / cn_news_analyst.md`，让读者以为 CN 文件也引用 ghost tools。实际 CN prompts（grep 验证）不引用任何 `get_*` 工具，数据源描述是 inline 的（akshare 行情 / 新闻）。两处标题下各加一行 Note 说明 override 仅适用于 EN prompt。
+- **`fetch_fundamentals.py` `_fmt_num` 对 `pd.NA` 返回 `'<NA>'` 而非 `'N/A'`**：旧守卫 `isinstance(v, float) and pd.isna(v)` 只捕获 float NaN，`pd.NA`（类型 `pandas._libs.missing.NAType`，不是 float）落到 `round(float(v), 2)` 抛 TypeError，被 except 捕获后返回 `str(v) = '<NA>'`，导致表格里 'N/A' 与 '<NA>' 两种缺失标记混排。改为 `v is None or pd.isna(v)`，覆盖 None / np.nan / pd.NA / NaT 四种缺失形态统一返回 'N/A'。
+- **`CHANGELOG.md` "9 个 ghost tools" 计数错误**：1.3.4 章节列了 9 个 ghost tools 但实际是 11 个（Market 3 + News 4 + Fundamentals 4）。改为 11。
+- **`.npmignore` 缺 `node_modules/` 和 `CLAUDE.md`**：补两行，作为 `files` allowlist 被移除时的 fallback。同时加备注说明：当 `files` 存在时根目录 `.npmignore` 不会被 npm 11 用于从 allowlist 减项，主防御在 `package.json` 的 `!` 否定项 + `prepublishOnly` 脚本。
+
+### Changed
+
+- `package.json` `version`: `1.3.4` → `1.3.5`。
+
 ## [1.3.4] - 2026-07-25
 
 ### Fixed (round 4)
@@ -12,7 +34,7 @@ All notable changes to this project will be documented in this file.
 - **`sentiment_analyst.md` 的 `{news_block}` 无数据源**：verbatim 提示词期望 `{news_block}` / `{stocktwits_block}` / `{reddit_block}` 三块预取数据，但 SKILL.md spawn 只让跑 `fetch_sentiment.py`（无新闻），`{news_block}` 孤立。在 `prompts/README.md` 文档化映射：`{stocktwits_block}`/`{reddit_block}` → 脚本输出对应段落；`{news_block}` → 脚本不提供，用 web-search fallback 或留空（News Analyst 单独覆盖新闻）。
 - **verbatim 提示词 30 个模板变量未文档化替换规则**：`{ticker}`、`{current_date}`、`{instrument_context}`、`{get_language_instruction()}`、`{NO_EXTERNAL_TOOLS}`、`{tool_names}`、`{system_message}`、`{target_label}`、`{company_name}`、`{asset_label}` 等 30 个 LangChain 风格变量，SKILL.md 从未指导主代理替换，子代理收到字面量 `{...}`。新增 `prompts/README.md` "Template Variable Substitution" 章节，5 个子表（Identity / Dates / Context-language-tooling / Data reports / Pre-fetched blocks）覆盖全部 30 个变量；SKILL.md §4 加指针。
 - **`--no-stats` 参数缺失**：`--indicators` 配对了 `--no-indicators`，但 `--stats` 只有 store_true 无配对 `--no-stats`。用户尝试 `--no-stats` 会触发 argparse `unrecognized arguments`。补 `--no-stats`（dest="stats", action="store_false"）。
-- **`prompts/README.md` Tool-Name Override 只覆盖 `market_analyst.md`**：Round 3 BUG 9 只列 `get_stock_data`/`get_indicators`/`get_verified_market_snapshot`，漏掉 `news_analyst.md` 的 `get_news`/`get_global_news`/`get_macro_indicators`/`get_prediction_markets` 和 `fundamentals_analyst.md` 的 `get_fundamentals`/`get_balance_sheet`/`get_cashflow`/`get_income_statement`。扩展章节覆盖全部 9 个 ghost tools，标注哪些有脚本映射、哪些需 web-search fallback。
+- **`prompts/README.md` Tool-Name Override 只覆盖 `market_analyst.md`**：Round 3 BUG 9 只列 `get_stock_data`/`get_indicators`/`get_verified_market_snapshot`，漏掉 `news_analyst.md` 的 `get_news`/`get_global_news`/`get_macro_indicators`/`get_prediction_markets` 和 `fundamentals_analyst.md` 的 `get_fundamentals`/`get_balance_sheet`/`get_cashflow`/`get_income_statement`。扩展章节覆盖全部 11 个 ghost tools，标注哪些有脚本映射、哪些需 web-search fallback。
 
 ### Changed
 

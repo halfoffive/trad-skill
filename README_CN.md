@@ -126,7 +126,7 @@ rm -rf /tmp/trad-skill
 ### A股特别说明
 
 - 股票代码使用6位纯数字格式（如 600519、000858）
-- 自动识别上海/深圳市场（`.SS` 后缀为上海，`.SZ` 后缀为深圳）
+- 脚本内部根据 6 位代码前缀自动判断交易所（6 开头 → 上海 .SS；0/3 开头 → 深圳 .SZ），用户只需提供 6 位纯数字
 - 数据源优先级：AKShare → yfinance
 - 支持中文新闻和情绪分析
 - 使用中国市场专用分析师提示词（`china_market_analyst.md`、`cn_news_analyst.md`）
@@ -253,7 +253,7 @@ trad-skill/                        # 仓库根目录（元文件 + 安装器）
 | Baostock | A股历史数据 | 免费 |
 | 通达信 TDX | 技术指标 | 免费 |
 
-详见 [references/data-sources.md](references/data-sources.md)。
+详见 [references/data-sources.md](tradingagents-analysis/references/data-sources.md)。
 
 ---
 

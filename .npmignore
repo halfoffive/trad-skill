@@ -1,7 +1,7 @@
-# Python bytecode
+﻿# Python bytecode
 **/__pycache__/
-*.pyc
-*.pyo
+**/*.pyc
+**/*.pyo
 
 # Tooling state
 .omo/
@@ -11,3 +11,14 @@
 
 # Logs
 *.log
+
+# Node（install.mjs 当前零依赖，但兜底防止误提交）
+node_modules/
+
+# Agent 桩文件（仓库根 CLAUDE.md 只是 "use AGENTS.md" 的指针，不应被打包）
+CLAUDE.md
+
+# 备注：当 package.json `files` 字段存在时，npm 优先用 `files` allowlist，
+# 根目录 .npmignore 不会从 allowlist 中再减项（实测 npm 11 / node 24）。
+# 因此本文件是 "files 字段被移除" 时的 fallback。主防御在 package.json 的
+# `!**/__pycache__/**` / `!**/*.pyc` 否定项 + prepublishOnly 脚本。
