@@ -4,7 +4,7 @@
 **When to use**: Invoked in the Analyst stage to analyze a company's fundamental data — financial statements, balance sheet, cash flow, income statement, and company profile.
 **Pipeline stage**: Analyst
 
-**Template variables**: `{tool_names}`, `{current_date}`, `{instrument_context}`, `{system_message}`, `{get_language_instruction()}` — injected at runtime.
+**Template variables**: `{get_language_instruction()}` — the only variable appearing in the prompt body. (The source repo's outer `ChatPromptTemplate` also bound `{tool_names}`/`{current_date}`/`{instrument_context}`/`{system_message}`, but trad-skill inlines the role prompt directly; those outer-template variables are not substituted at the body level. See `prompts/README.md` § "Template Variable Substitution" Note on phantom variables.)
 
 ## Prompt
 

@@ -4,7 +4,7 @@
 **When to use**: Invoked in the Analyst stage to research recent news and macro trends. Uses get_news, get_global_news, get_macro_indicators, and get_prediction_markets tools to produce a comprehensive world-state report relevant for trading.
 **Pipeline stage**: Analyst
 
-**Template variables**: `{asset_label}` (company/asset), `{tool_names}`, `{current_date}`, `{instrument_context}`, `{system_message}`, `{get_language_instruction()}` — injected at runtime.
+**Template variables**: `{asset_label}` (company/asset), `{get_language_instruction()}` — the only variables appearing in the prompt body. (The source repo's outer `ChatPromptTemplate` also bound `{tool_names}`/`{current_date}`/`{instrument_context}`/`{system_message}`, but trad-skill inlines the role prompt directly; those outer-template variables are not substituted at the body level. See `prompts/README.md` § "Template Variable Substitution" Note on phantom variables.)
 
 ## Prompt
 

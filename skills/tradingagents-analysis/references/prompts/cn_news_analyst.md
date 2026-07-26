@@ -4,7 +4,7 @@
 **When to use**: Invoked in the Analyst stage (CN-specific) to analyze real-time financial news and events affecting stock prices. Focuses on news timeliness, credibility, and market impact assessment for Chinese and global markets.
 **Pipeline stage**: Analyst (CN-specific)
 
-**Template variables**: `{tool_names}`, `{current_date}`, `{ticker}`, `{instrument_context}`, `{system_message}` — injected at runtime via LangChain prompt partials.
+**Template variables**: (none — body is static text with no LangChain variables. The source repo's outer `ChatPromptTemplate` wrapper used `{tool_names}`/`{current_date}`/`{ticker}`/`{instrument_context}`/`{system_message}`, but trad-skill inlines the role prompt directly; those outer-template variables are not substituted at the body level. See `prompts/README.md` § "Template Variable Substitution" Note on phantom variables.)
 
 ## Prompt
 
