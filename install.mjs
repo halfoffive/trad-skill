@@ -84,6 +84,12 @@ if (!fs.existsSync(srcSkill)) {
 
 // 确定目标父目录
 let parentDir;
+if (args.dir && args.agent) {
+  // --dir 和 --agent 语义互斥：--dir 是任意自定义路径，--agent 是预置目标。
+  // 同时指定会让"用哪个"产生歧义（曾有人 --dir foo --agent opencode 期望装到 foo
+  // 但实际走 --agent 分支装到 ~/.config/opencode/skills）。直接 fail，不静默选一个。
+  fail('不能同时指定 --dir 和 --agent（--dir 为自定义路径，--agent 为预置目标）');
+}
 if (args.dir) {
   // 展开 ~ 为 home 目录
   if (args.dir === '~') args.dir = home;
@@ -100,11 +106,11 @@ if (args.dir) {
 
 const destDir = path.join(parentDir, SKILL_NAME);
 
-// 确保父目录存在
-fs.mkdirSync(parentDir, { recursive: true });
-
-// 幂等：先删旧目录再复制
+// 幂等：先删旧目录再复制（含 mkdirSync 父目录创建，统一在 try/catch 内）
+// 旧版本 mkdirSync 在 try/catch 之外，权限不足 / 路径非法时会抛裸 Node 堆栈；
+// 移入既有 try/catch 走 fail() 友好提示。
 try {
+  fs.mkdirSync(parentDir, { recursive: true });
   if (fs.existsSync(destDir)) {
     fs.rmSync(destDir, { recursive: true, force: true });
   }
@@ -127,5 +133,9 @@ console.log('  3. 触发分析，例如："分析 AAPL" 或 "Analyze 600519" 。
 console.log('');
 console.log('脚本（绝对路径，子代理调用时使用）:');
 for (const s of ['fetch_stock_data.py', 'fetch_news.py', 'fetch_fundamentals.py', 'fetch_sentiment.py']) {
-  console.log(`  python "${path.join(scriptsDir, s).split(path.sep).join('/')}" ...`);
+  // path.resolve 把 scriptsDir 与脚本名合并为绝对路径（相对 scriptsDir 时也能解析）
+  // 旧版 path.join 在 parentDir 为相对路径（如 --dir ./foo）时输出 ./foo/.../script.py，
+  // 子代理 CWD 不在仓库根会找不到。resolve 后始终是绝对路径，且用 '/' 分隔便于跨平台复制粘贴。
+  const abs = path.resolve(scriptsDir, s).split(path.sep).join('/');
+  console.log(`  python "${abs}" ...`);
 }

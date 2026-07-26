@@ -101,7 +101,7 @@ These variables bind to the outputs of prior pipeline stages. See SKILL.md §4 "
 | `{news_report}` | News Analyst report (same digest/full rule). |
 | `{fundamentals_report}` | Fundamentals Analyst report (same digest/full rule). |
 | `{history}` | The running debate transcript (paragraph-sized, not full reports). |
-| `{investment_plan}` | Research Manager output → Trader input + Risk Debate input. |
+| `{investment_plan}` | Research Manager output → Trader input. (Risk Debate does NOT receive `{investment_plan}` — it receives `{trader_decision}`/`{trader_plan}` per the row below.) |
 | `{trader_decision}` / `{trader_plan}` | Trader output → Risk Debate input + Portfolio Manager input. |
 | `{research_plan}` | Research Manager output → Portfolio Manager input. |
 | `{current_response}` | The previous bull/bear argument in the current Research Debate round. |
@@ -125,11 +125,15 @@ Some verbatim prompts instruct the agent to call tools like `get_stock_data`, `g
 
 ### Market Analyst tools (`market_analyst.md` / `china_market_analyst.md`)
 
+> Note: Only `market_analyst.md` references these ghost tools. The CN counterpart `china_market_analyst.md` does NOT reference any `get_*` tools (verified by grep) — it describes its data source inline (akshare 行情), so the override below applies to the EN prompt only.
+
 - `get_stock_data` / `get_indicators` / `get_verified_market_snapshot` → `python "<skill>/scripts/fetch_stock_data.py" --symbol <ticker> [--start ... --end ...] [--tail ...] [--stats]`
 - The script output is the "verified snapshot" — it already pre-computes indicators (see `indicators.md`).
 - The analyst must run the script before writing its report; web search / browser tools are a fallback only for parts the script could not provide.
 
 ### News Analyst tools (`news_analyst.md` / `cn_news_analyst.md`)
+
+> Note: Only `news_analyst.md` references these ghost tools. The CN counterpart `cn_news_analyst.md` does NOT reference any `get_*` tools (verified by grep) — it describes its data source inline (akshare 新闻 / Google News), so the override below applies to the EN prompt only.
 
 - `get_news(ticker, start_date, end_date)` → `python "<skill>/scripts/fetch_news.py" --symbol <ticker> --days 7 --limit 8`
 - `get_global_news(curr_date, look_back_days, limit)` → no separate script; the same `fetch_news.py` output includes macro headlines where available. Use web-search fallback for broader macro context.

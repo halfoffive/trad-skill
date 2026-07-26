@@ -28,8 +28,17 @@ except ImportError:
 
 
 def _fmt_num(v) -> str:
-    """格式化数值：缺失/N/A 返回 'N/A'，否则四舍五入保留 2 位。"""
-    if v is None or (isinstance(v, float) and pd.isna(v)):
+    """格式化数值：缺失/N/A 返回 'N/A'，否则四舍五入保留 2 位。
+
+    覆盖 None / np.nan / pd.NA / NaT 四种缺失形态：
+    - 旧守卫 `isinstance(v, float) and pd.isna(v)` 只捕获 float NaN，
+      对 pd.NA 落到 round(float(v), 2) 抛 TypeError，被 except 捕获后返回 str(v) = '<NA>'，
+      导致表格里出现 'N/A' 与 '<NA>' 两种缺失标记混排。
+    - 改用 `v is None or pd.isna(v)` 统一所有缺失形态返回 'N/A'。
+      pd.isna 对标量返回 bool；对 array-like 返回数组（本函数仅被 _row_vals 的标量
+      cell 调用，不存在 array-like 输入）。
+    """
+    if v is None or pd.isna(v):
         return "N/A"
     try:
         return str(round(float(v), 2))

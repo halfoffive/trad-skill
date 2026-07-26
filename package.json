@@ -1,6 +1,6 @@
 {
   "name": "trad-skill",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Installable TradingAgents multi-agent stock-analysis skill (Claude Code / Cursor / Windsurf / Trae / OpenCode via vercel-labs/skills)",
   "license": "Apache-2.0",
   "repository": "github:halfoffive/trad-skill",
@@ -15,8 +15,15 @@
     "README.md",
     "README_CN.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "!**/__pycache__/**",
+    "!**/__pycache__",
+    "!**/*.pyc",
+    "!**/*.pyo"
   ],
+  "scripts": {
+    "prepublishOnly": "node -e \"const fs=require('node:fs');for(const d of ['tradingagents-analysis/scripts/__pycache__','skills/tradingagents-analysis/scripts/__pycache__']){try{fs.rmSync(d,{recursive:true,force:true});console.log('cleaned',d)}catch(e){console.warn('skip',d,e.message)}}\""
+  },
   "engines": {
     "node": ">=16.7"
   },

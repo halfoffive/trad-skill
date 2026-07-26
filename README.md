@@ -245,7 +245,7 @@ trad-skill/                        # repo root (meta files + installer)
 | AKShare | A-shares/HK | Price, news, sentiment | Free |
 | Baostock | A-shares | Historical data | Free |
 
-See [references/data-sources.md](references/data-sources.md) for the full catalog with fallback strategies.
+See [references/data-sources.md](tradingagents-analysis/references/data-sources.md) for the full catalog with fallback strategies.
 
 ---
 
