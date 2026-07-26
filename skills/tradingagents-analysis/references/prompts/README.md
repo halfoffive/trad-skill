@@ -59,6 +59,16 @@ Analysts (parallel) → Research Debate (sequential) → Decision → Risk Debat
 
 Prompts contain Python f-string variables (e.g., `{ticker}`, `{market_research_report}`) that are populated at runtime from the pipeline state. These document what data each agent expects to receive.
 
+## Tool-Name Override
+
+Some verbatim prompts (notably `market_analyst.md`) instruct the agent to call tools like `get_stock_data`, `get_indicators`, and `get_verified_market_snapshot`. **These tools do not exist in this skill** — the verbatim text is preserved per the AGENTS.md "never paraphrase" rule, but the actual data source is the Python script. SKILL.md §4 overrides these references at spawn time:
+
+- `get_stock_data` / `get_indicators` / `get_verified_market_snapshot` → `python "<skill>/scripts/fetch_stock_data.py" --symbol <ticker> [--start ... --end ...]`
+- The script output is the "verified snapshot" — it already pre-computes indicators (see `indicators.md`).
+- The analyst must run the script before writing its report; web search / browser tools are a fallback only for parts the script could not provide.
+
+Do not modify the verbatim prompt files. The override lives in `SKILL.md` §4 and `indicators.md`.
+
 ## Source Repositories
 
 - **TradingAgents**: https://github.com/TauricResearch/TradingAgents

@@ -196,7 +196,7 @@ def fetch_cn_sentiment(symbol: str) -> str:
         symbol: A股股票代码，如 600519
 
     返回:
-        格式化的情绪报告字符串，失败时返回 "<unavailable>"
+        格式化的情绪报告字符串；所有数据源失败时返回带结构化错误块的报告
     """
     # 初始化报告内容
     sections: list[str] = []
@@ -243,9 +243,9 @@ def fetch_cn_sentiment(symbol: str) -> str:
     else:
         sections.append("## 机构参与度\n\n> akshare 未安装，跳过\n")
 
-    # 如果所有数据源都失败
+    # 如果所有数据源都失败，返回已构建的结构化错误报告（不返回裸 <unavailable>）
     if not has_data:
-        return "<unavailable>"
+        sections.append("\n> A 股情绪数据源全部不可用\n")
 
     return "\n".join(sections)
 
