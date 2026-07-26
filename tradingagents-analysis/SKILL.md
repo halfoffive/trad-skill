@@ -128,7 +128,7 @@ Spawn **four parallel sub-agents**, one per analyst role. Each sub-agent receive
    - `references/prompts/news_analyst.md`
    - `references/prompts/fundamentals_analyst.md`
 
-   > **CN market prompt swap.** 当 `market` 为 A 股或港股时，用 `references/prompts/china_market_analyst.md` 替换 `market_analyst.md`，用 `references/prompts/cn_news_analyst.md` 替换 `news_analyst.md`；其余 3 个分析师（Sentiment / Fundamentals / Bull-Bear-Researcher 等）保持不变。
+   > **CN market prompt swap.** 当 `market` 为 A 股或港股时，用 `references/prompts/china_market_analyst.md` 替换 `market_analyst.md`，用 `references/prompts/cn_news_analyst.md` 替换 `news_analyst.md`；其余 2 个分析师（Sentiment / Fundamentals）保持不变。Stage 2 及之后的 researcher / manager / risk debator 等角色不受 `market` 影响（其 prompt 通用，不区分市场）。
 3. The **absolute path** to its data script (see Section 6).
 
 ### Resolve the skill directory first (important)
@@ -180,7 +180,7 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 > **Re-injection discipline (biggest token lever).** The verbatim role prompts bind the four analyst reports via template variables (`{market_research_report}`, `{sentiment_report}`, `{news_report}`, `{fundamentals_report}`). To avoid re-sending four full reports on every debate round:
 > - **Stages 2 & 5** (debates): bind those four variables to each report's **`## Key Signals` digest only**, not the full body. The `{history}` variable still carries the running debate transcript (naturally paragraph-sized, not full reports).
-> - **Stage 6** (Portfolio Manager): bind the **full reports + full transcript** once — the final synthesis deserves complete context, and it happens a single time.
+> - **Stage 6** (Portfolio Manager): `portfolio_manager.md` does **not** define `{market_research_report}` / `{sentiment_report}` / `{news_report}` / `{fundamentals_report}` slots in its body — only `{research_plan}`, `{trader_plan}`, `{history}` (risk debate transcript), and `{lessons_line}`. So bind `{research_plan}` to the Research Manager plan, `{trader_plan}` to the Trader proposal, `{history}` to the full risk-debate transcript, and **append the four full analyst reports as out-of-template context** (e.g., prepend them to the prompt as a `## Analyst Reports` section). The final synthesis deserves complete context, and it happens a single time.
 > Extract the `## Key Signals` block from each analyst report before feeding it into the debate prompts; keep the full reports aside for the Portfolio Manager.
 
 ---
