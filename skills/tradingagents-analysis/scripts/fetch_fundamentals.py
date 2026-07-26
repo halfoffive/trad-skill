@@ -275,6 +275,8 @@ def fetch_cn_fundamentals(symbol: str) -> str:
     if not has_data:
         sections.append("\n> akshare 数据获取失败，尝试 yfinance 降级方案...\n")
         # 根据代码前缀判断交易所后缀
+        # 已知限制（R6-22）：未覆盖北交所（8 开头）和 B 股（9 开头），这两类代码会被
+        # 错误加 .SZ 后缀。请依赖上方 AKShare 优先路径（已覆盖）。
         if symbol.startswith("6"):
             yf_symbol = f"{symbol}.SS"  # 上海证券交易所
         else:

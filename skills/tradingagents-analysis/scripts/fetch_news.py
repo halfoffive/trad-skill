@@ -178,6 +178,10 @@ def fetch_google_news(query: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT
     返回:
         markdown 格式新闻字符串或错误信息
     """
+    # 钳制负数：days 至少 1，limit 至少 0（契约：函数不抛异常，参数语义可预期；
+    # items[:limit] / df.head(limit) 在 limit=-1 时会切掉最后 1 条，违背降本设计）
+    days = max(1, int(days))
+    limit = max(0, int(limit))
     # 构建 Google News RSS 搜索 URL
     encoded_query = quote_plus(query)
     url = f"https://news.google.com/rss/search?q={encoded_query}+when:{days}d&hl=en&gl=US&ceid=US:en"
@@ -238,6 +242,10 @@ def fetch_cn_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -
     返回:
         markdown 格式新闻字符串或错误信息
     """
+    # 钳制负数：days 至少 1，limit 至少 0（与 fetch_google_news / fetch_yfinance_news 一致；
+    # df.head(limit) 在 limit=-1 时会切掉最后 1 条，违背降本设计）
+    days = max(1, int(days))
+    limit = max(0, int(limit))
     # 优先尝试 akshare 获取A股新闻
     if ak is not None:
         try:
