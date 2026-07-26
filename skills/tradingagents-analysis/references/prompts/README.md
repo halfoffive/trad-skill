@@ -61,6 +61,8 @@ The verbatim role prompts contain LangChain-style template variables (`{ticker}`
 
 The table below defines the substitution for every variable found across `references/prompts/*.md` (30 unique variables). The main agent should apply these when constructing each spawn prompt (see SKILL.md §4 spawn template).
 
+> **Note on phantom variables (R6-12).** Of these 30, three — `{current_date}`, `{tool_names}`, `{system_message}` — appear only in the source repo's outer `ChatPromptTemplate` wrapper, **not** in the extracted `system_message` bodies of trad-skill's prompt files. Their substitution is a no-op at the prompt-body level, but they are documented in the table below for completeness (the source repo's outer template used them; trad-skill inlines the role prompt directly). Additionally, six prompt files' front-matter "Template variables" lines previously listed these phantom variables — that was fixed in round 6 (R6-4) to only list variables that actually appear in the body.
+
 ### Identity & labels
 
 | Variable | Substitute with |

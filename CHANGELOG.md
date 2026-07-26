@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.6] - 2026-07-26
+
+### Fixed (round 6)
+
+30 confirmed bugs fixed (4 HIGH / 8 MEDIUM / 18 LOW). Review method: 3 parallel general-purpose sub-agents (Python scripts / Prompts+SKILL / Docs+Installer), each read-only, with cross-validation against source repos `../TradingAgents` and `../TradingAgents-CN`. 6 of the 30 are documented as known limitations (verbatim constraints or low-risk edge cases where code change is risky/out-of-scope): R6-5, R6-11, R6-19, R6-22, R6-23, R6-24.
+
+**HIGH (4)**
+
+- **R6-1 `fetch_us_fundamentals` ticker 作用域 bug**：`ticker = yf.Ticker(symbol)` 在 try 块内，若抛异常（网络瞬断/rate limit）则 `ticker` 永不赋值，后续三大报表 try 块引用 `ticker.financials` 抛 `NameError` 被各自 except 捕获后置 None，最终输出 "无数据"，掩盖公司概况网络失败。预声明 `ticker = None` + 三大报表前 `if ticker is None` 短路。
+- **R6-2 `fetch_yfinance_news` 的 `days` 参数完全未生效**：签名/docstring/header 都说 "最近 N 天"，但函数体无任何过滤逻辑。新增 `_parse_news_time` 辅助函数兼容 yfinance 多版本字段（`pubDate` ISO 8601 / `providerPublishTime` Unix 时间戳秒/毫秒），循环内对 `pub_time < cutoff` 的条目跳过；解析失败的条目保留（避免字段变更漏报）。
+- **R6-3 `{target_label}` / `{asset_label}` / `{fundamentals_label}` 替换规则与源仓库不符**：README 和 SKILL.md 声称前两者替换为 ticker symbol、第三个替换为字面 `Fundamentals`，但源仓库 `bull_researcher.py:20-25` / `news_analyst.py:17` 实际是 `stock`/`asset`、`company`/`asset`、`Company fundamentals report`/`Asset fundamentals report (may be unavailable for crypto)`。改为与源仓库一致。
+- **R6-4 6 个 prompt 的 front-matter "Template variables" 列了 body 中并不存在的变量**：`china_market_analyst.md` / `cn_news_analyst.md` / `market_analyst.md` / `fundamentals_analyst.md` / `news_analyst.md` / `sentiment_analyst.md` 声称的 `{tool_names}` / `{current_date}` / `{instrument_context}` / `{system_message}` 只存在于源仓库外层 `ChatPromptTemplate`，trad-skill 抽取的 body 里没有。front-matter 改为只列出 body 中实际出现的变量；CN 两个 prompt 标 "(none — body is static text)"。
+
+**MEDIUM (8)**
+
+- **R6-5 `compute_indicators` RSI 用 ewm 简化实现**：pandas `ewm(adjust=False)` 递推种子是 `gain[0]`，标准 Wilder RSI 种子是 `mean(gain[1:15])`，偏差约 1pp。文档化为已知限制（注释 + indicators.md 说明），不改代码（完整 Wilder 需 O(n) 循环，风险与收益不匹配）。
+- **R6-6 `fetch_cn/hk_stock_data` 中 `start_date.replace` 在 try 块外**：`start_date=None` 时抛 `AttributeError` 穿透函数边界，违反 never raises 契约。两函数顶部加 `if not isinstance(start_date, str) or not isinstance(end_date, str): return "错误: 日期参数无效"` 守卫。
+- **R6-7 `compute_indicators` RSI 在持续上涨时返回 NA 而非 100**：`avg_loss.replace(0, pd.NA)` 让 `-0.0` 也变 NA（`-0.0 == 0` 为 True），rs=NA、rsi=NA。改用显式分支：`avg_loss==0` 时 RSI=100，否则标准公式。
+- **R6-8 `compute_indicators` Bollinger Bands 用默认 ddof=1**：pandas `rolling().std()` 默认样本标准差（除以 n-1），传统布林带（StockCharts/TradingView）用总体标准差（ddof=0，除以 n），上下轨偏宽约 2.6%。改为 `std(ddof=0)`。
+- **R6-9 SKILL.md §4 Stage 6 re-injection 指示绑定 4 份 full report，但 `portfolio_manager.md` body 无对应变量**：`portfolio_manager.md` 只有 `{research_plan}` / `{trader_plan}` / `{history}` / `{lessons_line}`，没有 `{market_research_report}` 等槽位。SKILL.md §4 Stage 6 措辞改为 "append the four full analyst reports as out-of-template context (e.g., prepend as a `## Analyst Reports` section)"。
+- **R6-10 SKILL.md §4 CN 市场替换描述把 "2 个" 写成 "3 个"**：Stage 1 总共 4 个分析师，替换 2 个（Market/News）后剩 2 个（Sentiment/Fundamentals），不是 3 个；且 Bull-Bear-Researcher 是 Stage 2 角色不属于 Stage 1。改为 "其余 2 个分析师（Sentiment / Fundamentals）保持不变；Stage 2 及之后的 researcher/manager/risk debator 等角色不受 market 影响"。
+- **R6-11 `{instrument_context}` 替换文本与源仓库语义差异**：源仓库 `build_instrument_context` 是含反 hallucination 措辞的段落，trad-skill 改成紧凑单行（token 效率取舍）。README 加 Note 文档化为已知限制，agents 应依赖 SKILL.md §2 ticker 确认作为反幻觉闸门。
+- **R6-12 README 声称 "30 unique variables" 但其中 3 个在所有 prompt body 中都不存在**：`{current_date}` / `{tool_names}` / `{system_message}` 只存在于源仓库外层 `ChatPromptTemplate`。README 加 Note 说明这 3 个是 phantom variables（替换是 no-op，但为完整性文档化）。
+
+**LOW (18)**
+
+- **R6-13 `fetch_news.py` 顶部 `from datetime import ...` 死代码**：R6-2 修复后 `_parse_news_time` 用到 `datetime` / `timedelta` / `timezone`，import 不再是死代码。
+- **R6-14 `compute_indicators` 的 `_val` 对 inf 返回字符串 "inf"**：`pd.notna(float('inf'))` 为 True，`round(inf, 4)=inf`。VWMA / MFI 分母为 0 时产生 inf。改用 `math.isfinite(float(v))` 同时排除 NaN 与 ±inf，统一返回 "N/A"。
+- **R6-15 `fetch_stocktwits` docstring 说 limit 默认 30**：`DEFAULT_SENTIMENT_LIMIT=15`，docstring 与代码不符。改为 "默认 15"。
+- **R6-16 `fetch_news` / `fetch_sentiment` 的 `limit` / `days` 参数未钳制负数**：`--limit -1` 时 `news_list[:-1]` / `df.head(-1)` / `messages[:limit]` 切掉最后一条，违背降本设计。各入口函数顶部加 `days = max(1, int(days))` / `limit = max(0, int(limit))`。
+- **R6-17 `compute_stats` 注释说 "日对数收益" 实际用 `pct_change`**：注释与代码不一致。改为 "日百分比收益"。
+- **R6-18 `compute_indicators` 的 MFI 在所有 tp 持平时返回 NA 而非 50**：同 R6-7 思路处理 0/0 与 X/0 边缘情况：`pos_sum==0 & neg_sum==0` → 50（中性）；`pos_sum>0 & neg_sum==0` → 100（强买）；`pos_sum==0 & neg_sum>0` → 0（强卖）。
+- **R6-19 `fetch_reddit_sentiment` / `fetch_stocktwits` 中 symbol 未 URL 编码**：常见股票代码不含 `&` / `=` / `?` 等特殊字符，Reddit/StockTwits API 对 `.` / `-` 容忍。文档化为已知限制（代码注释说明）。
+- **R6-20 `fetch_yfinance_news` 中 `content.get` 在 content 非 dict 时抛 AttributeError**：R6-2 修复时已加 `if not isinstance(content, dict): content = {}` 守卫，单条坏数据不再中止整个循环。
+- **R6-21 `build_compact_report` 中 `tail=None` 抛 TypeError**：`int(None)` 抛 TypeError，CLI 路径 argparse 不会产生 None，仅直接调用触发。改为 `tail = max(0, int(tail)) if tail is not None else 0`。
+- **R6-22 `fetch_cn_fundamentals` / `fetch_cn_stock_data` 的 yfinance 降级未覆盖北交所（8 开头）和 B 股（9 开头）**：会被错误加 `.SZ` 后缀。文档化为已知限制（北交所/B 股流动性低，yfinance 覆盖有限，AKShare 优先路径已覆盖）。
+- **R6-23 `market_analyst.md` 的指标列表不含 MFI 但脚本预计算 MFI**：源仓库 `market_analyst.py` 原貌不含 MFI，trad-skill verbatim 继承。indicators.md 加 Note 说明 Market Analyst 应把脚本输出的 MFI 行作为补充指标解读。
+- **R6-24 多数非 CN prompt 在 `{get_language_instruction()}` 前多了一个空行**：源仓库 `+ get_language_instruction()` 无换行，trad-skill 加了空行（whitespace 美化）。文档化为已知限制（对 LLM 几乎无影响）。
+- **R6-25 `trader.md` 的 2-block 结构未在 SKILL.md §5 Stage 4 说明**：trader.md 有 `## System Message` 和 `## User Message` 两个独立代码块。SKILL.md §5 Stage 4 加 Note 说明需用两个 role 构造 LLM 调用。
+- **R6-26 `{get_language_instruction()}` 在 English 场景下的替换值与源仓库不一致**：源仓库 English 时返回空字符串，trad-skill README 声称总是替换为 `Respond in <language> per output_language.`。README 改为：English → 空字符串；非 English → ` Write your entire response in <lang>.`（贴近源行为）。
+- **R6-27 SKILL.md §6 表格未列出 `--indicators` / `--no-indicators` / `--no-stats` 三个 argparse flag**：fetch_stock_data.py 行的描述补一句 "Flags: `--indicators`/`--no-indicators` (default on), `--stats`/`--no-stats` (default off), `--raw` (legacy full CSV), `--tail N` (default 30)"。
+- **R6-28 `install.mjs` `destDir` 仍用 `path.join`**：round-5 修了 `scriptsDir` 用 `path.resolve`，但漏了 `destDir`。`--dir ./foo` 时显示相对路径。改为 `path.resolve(parentDir, SKILL_NAME)`。
+- **R6-29 `README.md` 配置表 `market` 默认值 `...` 应为 `—`**：与 SKILL.md / README_CN.md 一致（em dash 表示 "无默认值，自动检测"）。
+- **R6-30 `README_CN.md` 港股 "5位数字" 与同文件 L29 4位数字示例矛盾**：L29 用 `0700.HK, 9988.HK`，L136 说 "5位数字"。改为 "4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；脚本 `zfill(5)` 两种都接受）"。
+
+### Changed
+
+- `package.json` `version`: `1.3.5` → `1.3.6`。
+- 新增 `verify_round6.py`：32 项检查（30 bug + AST 语法 + 副本一致性），全部通过。
+
 ## [1.3.5] - 2026-07-26
 
 ### Fixed (round 5)

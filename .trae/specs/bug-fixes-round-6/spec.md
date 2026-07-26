@@ -2,6 +2,7 @@
 
 **Branch**: `fix/round6-bugs` (stacked on `fix/round5-bugs`)
 **Date**: 2026-07-26
+**Status**: ✅ COMPLETE — 30/30 bugs fixed (24 code/doc changes + 6 documented as limitations); 32/32 verify_round6.py checks pass; PR #7 open.
 **Review method**: 3 parallel general-purpose sub-agents (Python scripts / Prompts+SKILL / Docs+Installer), each read-only, with cross-validation against source repos `../TradingAgents` and `../TradingAgents-CN`.
 
 ## Summary
