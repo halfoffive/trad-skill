@@ -20,6 +20,7 @@
 # 返回值：格式化的字符串（适合注入LLM提示词）
 
 import argparse
+import math
 from datetime import date, timedelta
 
 import pandas as pd
@@ -139,14 +140,26 @@ def compute_indicators(df: pd.DataFrame) -> str:
         vwma = (close * volume).rolling(20).sum() / volume.rolling(20).sum()
 
         # MFI(14)：资金流量指标
+        # 处理 0/0 与 X/0 边缘情况（同 R6-7 RSI 思路）：
+        # - pos_sum==0 & neg_sum==0（tp 全持平）→ MFI=50（中性）
+        # - pos_sum>0 & neg_sum==0（持续净流入）→ MFI=100（强买）
+        # - pos_sum==0 & neg_sum>0（持续净流出）→ MFI=0（强卖）
+        # 旧实现 neg_sum.replace(0, pd.NA) 让 mfr=NA、mfi=NA，掩盖了这些信号。
         tp = (high + low + close) / 3
         mf = tp * volume
         pos = mf.where(tp > tp.shift(1), 0.0)
         neg = mf.where(tp < tp.shift(1), 0.0)
         pos_sum = pos.rolling(14).sum()
         neg_sum = neg.rolling(14).sum()
-        mfr = pos_sum / neg_sum.replace(0, pd.NA)
-        mfi = 100 - 100 / (1 + mfr)
+        mfi = pd.Series(float("nan"), index=close.index)
+        mask_both_zero = (pos_sum == 0) & (neg_sum == 0)
+        mask_neg_zero = (neg_sum == 0) & (pos_sum > 0)
+        mask_pos_zero = (pos_sum == 0) & (neg_sum > 0)
+        mask_normal = (pos_sum > 0) & (neg_sum > 0)
+        mfi[mask_both_zero] = 50.0
+        mfi[mask_neg_zero] = 100.0
+        mfi[mask_pos_zero] = 0.0
+        mfi[mask_normal] = 100 - 100 / (1 + pos_sum[mask_normal] / neg_sum[mask_normal])
 
         # 取最后一行的最新值
         last = len(df) - 1
@@ -154,7 +167,13 @@ def compute_indicators(df: pd.DataFrame) -> str:
 
         def _val(series):
             v = series.iloc[last]
-            return round(float(v), 4) if pd.notna(v) else "N/A"
+            # pd.notna(float('inf')) 返回 True，会让 round(inf,4)=inf 输出字符串 "inf"。
+            # 用 math.isfinite 同时排除 NaN 与 ±inf，统一返回 "N/A"（R6-14）。
+            # VWMA / MFI 在分母为 0 时可能产生 inf（MFI 已在 R6-18 显式分支覆盖，
+            # 但 VWMA 仍可能在 volume==0 时产生 inf，此处兜底）。
+            if not pd.notna(v) or not math.isfinite(float(v)):
+                return "N/A"
+            return round(float(v), 4)
 
         # 趋势信号判定
         # 金叉/死叉：SMA50 vs SMA200
@@ -220,7 +239,8 @@ def compute_stats(df: pd.DataFrame) -> str:
         first = close.iloc[0]
         last = close.iloc[-1]
         ret = (last / first - 1) * 100 if first else float("nan")
-        # 日对数收益 → 年化波动率（252 交易日）
+        # 日百分比收益 → 年化波动率（252 交易日；注：用 pct_change 而非对数收益，
+        # 短期波动率两种算法差异 < 0.1pp，pct_change 更直观且与 ret 字段一致）
         daily_ret = close.pct_change().dropna()
         vol = daily_ret.std() * (252 ** 0.5) * 100 if len(daily_ret) > 1 else float("nan")
         avg_vol = df["Volume"].astype(float).mean() if "Volume" in df.columns else float("nan")
@@ -317,6 +337,9 @@ def fetch_cn_stock_data(symbol: str, start_date: str, end_date: str) -> str:
 
     # 降级方案：使用 yfinance，根据代码前缀判断交易所
     # 6开头为上海（.SS），0/3开头为深圳（.SZ）
+    # 已知限制（R6-22）：未覆盖北交所（8 开头，如 830799）和 B 股（9 开头，如 900901），
+    # 这两类代码会被错误加 .SZ 后缀，yfinance 找不到数据。北交所/B 股流动性低且 yfinance
+    # 本身覆盖有限，请依赖上方 AKShare 优先路径（已覆盖）。
     if symbol.startswith("6"):
         yf_symbol = f"{symbol}.SS"
     else:
@@ -462,7 +485,9 @@ def build_compact_report(symbol: str, start_date: str, end_date: str, tail: int,
     替代整段原始 CSV，大幅降低注入提示词的 token 量。
     """
     # 钳制负数 tail，避免 df.tail() 抛 ValueError（契约：函数不抛异常）
-    tail = max(0, int(tail))
+    # tail=None 时 int(None) 抛 TypeError，需先判空（CLI 路径 argparse type=int 不会产生 None，
+    # 但直接调用 build_compact_report(..., tail=None) 会触发）
+    tail = max(0, int(tail)) if tail is not None else 0
     # 仅触发一次网络请求，拿到完整 CSV 文本
     csv_text = fetch_stock_data(symbol, start_date, end_date)
     # 抓取失败直接返回错误信息，避免重复请求
