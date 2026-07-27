@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/trad-data
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        working-directory: crates/trad-data
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: crates/trad-data
+
+      - name: Run tests
+        run: cargo test
+        working-directory: crates/trad-data
+
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            use-cross: false
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use-cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            use-cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            use-cross: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            use-cross: false
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            use-cross: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/trad-data
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use-cross == true
+        uses: taiki-e/install-action@cross
+
+      - name: Build release binary (native)
+        if: matrix.use-cross == false
+        run: cargo build --release --target ${{ matrix.target }}
+        working-directory: crates/trad-data
+
+      - name: Build release binary (cross)
+        if: matrix.use-cross == true
+        run: cross build --release --target ${{ matrix.target }}
+        working-directory: crates/trad-data
+
+      - name: Upload artifact (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trad-data-${{ matrix.target }}
+          path: crates/trad-data/target/${{ matrix.target }}/release/trad-data
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trad-data-${{ matrix.target }}
+          path: crates/trad-data/target/${{ matrix.target }}/release/trad-data.exe

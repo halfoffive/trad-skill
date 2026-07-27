@@ -17,14 +17,10 @@
     "README.md",
     "README_CN.md",
     "CHANGELOG.md",
-    "LICENSE",
-    "!**/__pycache__/**",
-    "!**/__pycache__",
-    "!**/*.pyc",
-    "!**/*.pyo"
+    "LICENSE"
   ],
   "scripts": {
-    "prepublishOnly": "node -e \"const fs=require('node:fs');for(const d of ['tradingagents-analysis/scripts/__pycache__','skills/tradingagents-analysis/scripts/__pycache__']){try{fs.rmSync(d,{recursive:true,force:true});console.log('cleaned',d)}catch(e){console.warn('skip',d,e.message)}}\" && echo 'NOTE: Ensure cargo build --release has been run and binaries are placed in bin/<platform>-<arch>/ before publishing.'"
+    "prepublishOnly": "echo 'NOTE: Ensure cargo build --release has been run and binaries are placed in bin/<platform>-<arch>/ before publishing.'"
   },
   "engines": {
     "node": ">=16.7"
