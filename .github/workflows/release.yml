@@ -47,13 +47,15 @@ jobs:
             use-cross: false
           - target: x86_64-pc-windows-gnu
             os: ubuntu-latest
-            use-cross: true
+            use-cross: false
+            use-zigbuild: true
           - target: aarch64-pc-windows-gnu
             os: ubuntu-latest
-            use-cross: true
+            use-cross: false
+            use-zigbuild: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -70,14 +72,25 @@ jobs:
         if: matrix.use-cross == true
         uses: taiki-e/install-action@cross
 
+      - name: Install zig and cargo-zigbuild
+        if: matrix.use-zigbuild == true
+        run: |
+          pip install ziglang
+          cargo install cargo-zigbuild
+
       - name: Build release binary (native)
-        if: matrix.use-cross == false
+        if: matrix.use-cross == false && matrix.use-zigbuild != true
         run: cargo build --release --target ${{ matrix.target }}
         working-directory: crates/trad-data
 
       - name: Build release binary (cross)
         if: matrix.use-cross == true
         run: cross build --release --target ${{ matrix.target }}
+        working-directory: crates/trad-data
+
+      - name: Build release binary (zigbuild)
+        if: matrix.use-zigbuild == true
+        run: cargo zigbuild --release --target ${{ matrix.target }}
         working-directory: crates/trad-data
 
       - name: Prepare artifact (Unix)
@@ -105,7 +118,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
