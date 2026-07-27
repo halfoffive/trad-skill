@@ -52,12 +52,21 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             use-cross: true
-          - target: x86_64-apple-darwin
-            os: macos-13
-            use-cross: false
           - target: aarch64-apple-darwin
             os: macos-latest
             use-cross: false
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            use-cross: true
+          - target: aarch64-pc-windows-gnu
+            os: ubuntu-latest
+            use-cross: true
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            use-cross: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            use-cross: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             use-cross: false
@@ -94,14 +103,14 @@ jobs:
         working-directory: crates/trad-data
 
       - name: Upload artifact (Unix)
-        if: runner.os != 'Windows'
+        if: "!contains(matrix.target, 'windows')"
         uses: actions/upload-artifact@v4
         with:
           name: trad-data-${{ matrix.target }}
           path: crates/trad-data/target/${{ matrix.target }}/release/trad-data
 
       - name: Upload artifact (Windows)
-        if: runner.os == 'Windows'
+        if: contains(matrix.target, 'windows')
         uses: actions/upload-artifact@v4
         with:
           name: trad-data-${{ matrix.target }}
