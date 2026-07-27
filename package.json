@@ -6,10 +6,12 @@
   "repository": "github:halfoffive/trad-skill",
   "homepage": "https://github.com/halfoffive/trad-skill",
   "bin": {
-    "trad-skill": "install.mjs"
+    "trad-skill": "install.mjs",
+    "trad-data": "bin/trad-data-wrapper.js"
   },
   "files": [
     "install.mjs",
+    "bin/",
     "tradingagents-analysis/",
     "skills/",
     "README.md",
@@ -22,7 +24,7 @@
     "!**/*.pyo"
   ],
   "scripts": {
-    "prepublishOnly": "node -e \"const fs=require('node:fs');for(const d of ['tradingagents-analysis/scripts/__pycache__','skills/tradingagents-analysis/scripts/__pycache__']){try{fs.rmSync(d,{recursive:true,force:true});console.log('cleaned',d)}catch(e){console.warn('skip',d,e.message)}}\""
+    "prepublishOnly": "node -e \"const fs=require('node:fs');for(const d of ['tradingagents-analysis/scripts/__pycache__','skills/tradingagents-analysis/scripts/__pycache__']){try{fs.rmSync(d,{recursive:true,force:true});console.log('cleaned',d)}catch(e){console.warn('skip',d,e.message)}}\" && echo 'NOTE: Ensure cargo build --release has been run and binaries are placed in bin/<platform>-<arch>/ before publishing.'"
   },
   "engines": {
     "node": ">=16.7"

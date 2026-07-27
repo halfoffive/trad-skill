@@ -120,6 +120,11 @@ try {
     recursive: true,
     filter: (src) => path.basename(src) !== '__pycache__',
   });
+  // 复制 trad-data 二进制
+  const srcBin = path.join(__dirname, 'bin');
+  if (fs.existsSync(srcBin)) {
+    fs.cpSync(srcBin, path.join(destDir, 'bin'), { recursive: true });
+  }
 } catch (e) {
   fail(`安装失败：${e.message}`);
 }
@@ -127,13 +132,32 @@ try {
 const scriptsDir = path.join(destDir, 'scripts');
 console.log(`✓ 已安装 ${SKILL_NAME} → ${destDir}`);
 console.log('');
+// 检查 trad-data 二进制是否已安装
+const binDir = path.join(__dirname, 'bin');
+const platformKey = `${os.platform()}-${os.arch()}`;
+const binExt = os.platform() === 'win32' ? '.exe' : '';
+const hasBinary = fs.existsSync(path.join(binDir, platformKey, `trad-data${binExt}`));
+
 console.log('下一步：');
-console.log(`  1. 安装 Python 依赖（脚本运行需要）:`);
-console.log('     pip install yfinance akshare requests pandas');
+if (hasBinary) {
+  console.log(`  ✓ trad-data 二进制已安装 (${platformKey})`);
+  console.log('  对于 US/HK/Crypto 市场数据，无需额外 Python 依赖。');
+  console.log('  对于中国A股市场（fallback），仍需安装 Python 依赖：');
+  console.log('     pip install yfinance akshare requests pandas');
+} else {
+  console.log(`  1. 安装 Python 依赖（脚本运行需要 / trad-data 二进制未找到）:`);
+  console.log('     pip install yfinance akshare requests pandas');
+}
 console.log('  2. 重启你的 AI agent / 开一个新会话，让它加载该技能。');
 console.log('  3. 触发分析，例如："分析 AAPL" 或 "Analyze 600519" 。');
 console.log('');
-console.log('脚本（绝对路径，子代理调用时使用）:');
+console.log('数据工具（Rust二进制，推荐）:');
+console.log('  trad-data stock --symbol AAPL');
+console.log('  trad-data fundamentals --symbol AAPL');
+console.log('  trad-data news --symbol AAPL');
+console.log('  trad-data sentiment --symbol AAPL');
+console.log('');
+console.log('Python脚本（fallback，中国市场数据需要）:');
 for (const s of ['fetch_stock_data.py', 'fetch_news.py', 'fetch_fundamentals.py', 'fetch_sentiment.py']) {
   // path.resolve 把 scriptsDir 与脚本名合并为绝对路径（相对 scriptsDir 时也能解析）
   // 旧版 path.join 在 parentDir 为相对路径（如 --dir ./foo）时输出 ./foo/.../script.py，
