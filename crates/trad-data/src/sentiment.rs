@@ -161,11 +161,13 @@ async fn fetch_reddit_sentiment(symbol: &str, days: u32) -> String {
                                     score: post_data
                                         .get("score")
                                         .and_then(|v| v.as_f64())
-                                        .unwrap_or(0.0) as i64,
+                                        .unwrap_or(0.0)
+                                        as i64,
                                     num_comments: post_data
                                         .get("num_comments")
                                         .and_then(|v| v.as_f64())
-                                        .unwrap_or(0.0) as i64,
+                                        .unwrap_or(0.0)
+                                        as i64,
                                     subreddit: subreddit.to_string(),
                                 });
                             }
@@ -182,7 +184,7 @@ async fn fetch_reddit_sentiment(symbol: &str, days: u32) -> String {
     }
 
     // 按互动量（分数 + 评论数）降序排序
-    all_posts.sort_by(|a, b| (b.score + b.num_comments).cmp(&(a.score + a.num_comments)));
+    all_posts.sort_by_key(|p| std::cmp::Reverse(p.score + p.num_comments));
 
     let mut sections = Vec::new();
     sections.push(format!("# Reddit 情绪 ({})\n", symbol));

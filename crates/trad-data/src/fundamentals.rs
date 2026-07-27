@@ -41,7 +41,7 @@ fn fmt_num(v: Option<&Value>) -> String {
 fn get_nested<'a>(val: &'a Value, path: &[&str]) -> Option<&'a Value> {
     let mut cur = val;
     for &key in path {
-        cur = if let Some(idx) = key.parse::<usize>().ok() {
+        cur = if let Ok(idx) = key.parse::<usize>() {
             cur.get(idx)?
         } else {
             cur.get(key)?
@@ -59,10 +59,7 @@ fn calc_yoy(cur: Option<f64>, prev: Option<f64>) -> String {
 }
 
 /// 从报表数组中按行标签提取数值序列（按年份倒序）
-fn extract_row_values(
-    statements: &[Value],
-    row_label: &str,
-) -> Vec<Option<f64>> {
+fn extract_row_values(statements: &[Value], row_label: &str) -> Vec<Option<f64>> {
     statements
         .iter()
         .map(|stmt| {
@@ -158,9 +155,9 @@ async fn fetch_us_fundamentals(symbol: &str) -> String {
         .and_then(|v| v.get("cashflowStatements"))
         .and_then(|v| v.as_array());
 
-    let has_data = income_stmts.map_or(false, |a| !a.is_empty())
-        || balance_stmts.map_or(false, |a| !a.is_empty())
-        || cashflow_stmts.map_or(false, |a| !a.is_empty());
+    let has_data = income_stmts.is_some_and(|a| !a.is_empty())
+        || balance_stmts.is_some_and(|a| !a.is_empty())
+        || cashflow_stmts.is_some_and(|a| !a.is_empty());
 
     if has_data {
         sections.push("## 关键财务指标（最近年度，脚本抽取）\n".to_string());
@@ -189,22 +186,62 @@ fn build_us_metric_table(
         label: &'a str,
     }
     let rows = [
-        RowDef { display: "营收", source: "income", label: "totalRevenue" },
-        RowDef { display: "净利润", source: "income", label: "netIncome" },
-        RowDef { display: "摊薄EPS", source: "income", label: "dilutedEPS" },
-        RowDef { display: "毛利", source: "income", label: "grossProfit" },
-        RowDef { display: "总资产", source: "balance", label: "totalAssets" },
-        RowDef { display: "总负债", source: "balance", label: "totalDebt" },
-        RowDef { display: "股东权益", source: "balance", label: "totalStockholderEquity" },
-        RowDef { display: "经营现金流", source: "cashflow", label: "operatingCashFlow" },
-        RowDef { display: "自由现金流", source: "cashflow", label: "freeCashFlow" },
+        RowDef {
+            display: "营收",
+            source: "income",
+            label: "totalRevenue",
+        },
+        RowDef {
+            display: "净利润",
+            source: "income",
+            label: "netIncome",
+        },
+        RowDef {
+            display: "摊薄EPS",
+            source: "income",
+            label: "dilutedEPS",
+        },
+        RowDef {
+            display: "毛利",
+            source: "income",
+            label: "grossProfit",
+        },
+        RowDef {
+            display: "总资产",
+            source: "balance",
+            label: "totalAssets",
+        },
+        RowDef {
+            display: "总负债",
+            source: "balance",
+            label: "totalDebt",
+        },
+        RowDef {
+            display: "股东权益",
+            source: "balance",
+            label: "totalStockholderEquity",
+        },
+        RowDef {
+            display: "经营现金流",
+            source: "cashflow",
+            label: "operatingCashFlow",
+        },
+        RowDef {
+            display: "自由现金流",
+            source: "cashflow",
+            label: "freeCashFlow",
+        },
     ];
 
     // 收集年份标签（取最近 4 年）
     let mut year_labels = Vec::new();
     for stmts in [income, balance, cashflow].iter().flatten() {
         for stmt in *stmts {
-            if let Some(end_date) = stmt.get("endDate").and_then(|v| v.get("fmt")).and_then(|v| v.as_str()) {
+            if let Some(end_date) = stmt
+                .get("endDate")
+                .and_then(|v| v.get("fmt"))
+                .and_then(|v| v.as_str())
+            {
                 let label = end_date.get(..4).unwrap_or(end_date).to_string();
                 if !year_labels.contains(&label) {
                     year_labels.push(label);
@@ -228,10 +265,7 @@ fn build_us_metric_table(
 
     // 表头
     let mut lines = Vec::new();
-    let header = format!(
-        "| 指标 | {} | YoY(营收/净利) |",
-        year_labels.join(" | ")
-    );
+    let header = format!("| 指标 | {} | YoY(营收/净利) |", year_labels.join(" | "));
     lines.push(header);
     lines.push(format!("|{}|", "---|".repeat(ncols + 2)));
 
@@ -295,32 +329,29 @@ async fn fetch_cn_fundamentals(symbol: &str) -> String {
     );
 
     let mut has_info = false;
-    match get_with_retry(&client, &info_url, Some(2)).await {
-        Ok(resp) => {
-            if let Ok(body) = resp.json::<Value>().await {
-                if let Some(data) = body.get("data") {
-                    sections.push("## 个股基本信息\n".to_string());
-                    let field_map = [
-                        ("代码", "f57"),
-                        ("简称", "f58"),
-                        ("总股本", "f84"),
-                        ("流通股", "f85"),
-                        ("行业", "f127"),
-                        ("总市值", "f116"),
-                        ("流通市值", "f117"),
-                        ("上市时间", "f189"),
-                        ("最新价", "f43"),
-                    ];
-                    for (display, key) in &field_map {
-                        let val = data.get(key).unwrap_or(&Value::Null);
-                        sections.push(format!("- **{}**: {}", display, fmt_num(Some(val))));
-                    }
-                    sections.push(String::new());
-                    has_info = true;
+    if let Ok(resp) = get_with_retry(&client, &info_url, Some(2)).await {
+        if let Ok(body) = resp.json::<Value>().await {
+            if let Some(data) = body.get("data") {
+                sections.push("## 个股基本信息\n".to_string());
+                let field_map = [
+                    ("代码", "f57"),
+                    ("简称", "f58"),
+                    ("总股本", "f84"),
+                    ("流通股", "f85"),
+                    ("行业", "f127"),
+                    ("总市值", "f116"),
+                    ("流通市值", "f117"),
+                    ("上市时间", "f189"),
+                    ("最新价", "f43"),
+                ];
+                for (display, key) in &field_map {
+                    let val = data.get(key).unwrap_or(&Value::Null);
+                    sections.push(format!("- **{}**: {}", display, fmt_num(Some(val))));
                 }
+                sections.push(String::new());
+                has_info = true;
             }
         }
-        Err(_) => {}
     }
 
     if !has_info {

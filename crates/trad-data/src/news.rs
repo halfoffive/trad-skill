@@ -176,7 +176,11 @@ fn parse_news_time(item: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
     // 尝试 Unix 时间戳
     for field in &["providerPublishTime", "pubDate", "publishTime"] {
         if let Some(n) = item.get(field).and_then(|v| v.as_f64()) {
-            let ts = if n > 1e12 { (n / 1000.0) as i64 } else { n as i64 };
+            let ts = if n > 1e12 {
+                (n / 1000.0) as i64
+            } else {
+                n as i64
+            };
             if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
                 return Some(dt);
             }
@@ -389,11 +393,8 @@ async fn fetch_cn_news(symbol: &str, days: u32, limit: u32) -> String {
                     }
 
                     if !results.is_empty() {
-                        let header = format!(
-                            "## A股 {} 相关新闻（共 {} 条）\n\n",
-                            symbol,
-                            results.len()
-                        );
+                        let header =
+                            format!("## A股 {} 相关新闻（共 {} 条）\n\n", symbol, results.len());
                         return format!("{}{}", header, results.join("\n"));
                     }
                 }

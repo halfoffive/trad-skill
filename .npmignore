@@ -1,9 +1,4 @@
-﻿﻿# Python bytecode
-**/__pycache__/
-**/*.pyc
-**/*.pyo
-
-# Tooling state
+﻿﻿# Tooling state
 .omo/
 .codegraph/
 .trae/
@@ -20,5 +15,4 @@ CLAUDE.md
 
 # 备注：当 package.json `files` 字段存在时，npm 优先用 `files` allowlist，
 # 根目录 .npmignore 不会从 allowlist 中再减项（实测 npm 11 / node 24）。
-# 因此本文件是 "files 字段被移除" 时的 fallback。主防御在 package.json 的
-# `!**/__pycache__/**` / `!**/*.pyc` 否定项 + prepublishOnly 脚本。
+# 因此本文件是 "files 字段被移除" 时的 fallback。

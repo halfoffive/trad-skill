@@ -1,7 +1,7 @@
-pub mod us;
 pub mod cn;
-pub mod hk;
 pub mod crypto;
+pub mod hk;
+pub mod us;
 
 /// 市场类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

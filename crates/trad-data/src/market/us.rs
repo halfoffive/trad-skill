@@ -13,12 +13,12 @@ fn date_to_unix(date_str: &str) -> Result<i64, String> {
 
 /// 解析 Yahoo Finance chart API 响应中的 OHLCV 数据
 fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, String> {
-    let root: Value = serde_json::from_str(body)
-        .map_err(|e| format!("JSON 解析失败: {}", e))?;
+    let root: Value = serde_json::from_str(body).map_err(|e| format!("JSON 解析失败: {}", e))?;
 
     // 检查是否有错误信息
     if let Some(err) = root.get("chart").and_then(|c| c.get("error")) {
-        let desc = err.get("description")
+        let desc = err
+            .get("description")
             .and_then(|d| d.as_str())
             .unwrap_or("未知错误");
         return Err(format!("Yahoo Finance 错误({}): {}", symbol, desc));
@@ -36,9 +36,7 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
         .and_then(|t| t.as_array())
         .ok_or("缺少 timestamp 字段")?;
 
-    let indicators = result
-        .get("indicators")
-        .ok_or("缺少 indicators 字段")?;
+    let indicators = result.get("indicators").ok_or("缺少 indicators 字段")?;
 
     let quote = indicators
         .get("quote")
@@ -46,24 +44,38 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
         .and_then(|arr| arr.first())
         .ok_or("缺少 quote 数据")?;
 
-    let opens = quote.get("open").and_then(|v| v.as_array()).ok_or("缺少 open")?;
-    let highs = quote.get("high").and_then(|v| v.as_array()).ok_or("缺少 high")?;
-    let lows = quote.get("low").and_then(|v| v.as_array()).ok_or("缺少 low")?;
-    let closes = quote.get("close").and_then(|v| v.as_array()).ok_or("缺少 close")?;
-    let volumes = quote.get("volume").and_then(|v| v.as_array()).ok_or("缺少 volume")?;
+    let opens = quote
+        .get("open")
+        .and_then(|v| v.as_array())
+        .ok_or("缺少 open")?;
+    let highs = quote
+        .get("high")
+        .and_then(|v| v.as_array())
+        .ok_or("缺少 high")?;
+    let lows = quote
+        .get("low")
+        .and_then(|v| v.as_array())
+        .ok_or("缺少 low")?;
+    let closes = quote
+        .get("close")
+        .and_then(|v| v.as_array())
+        .ok_or("缺少 close")?;
+    let volumes = quote
+        .get("volume")
+        .and_then(|v| v.as_array())
+        .ok_or("缺少 volume")?;
 
     let mut rows = Vec::new();
-    for i in 0..timestamps.len() {
+    for (i, ts_val) in timestamps.iter().enumerate() {
         // 提取时间戳并转为日期字符串
-        let ts = timestamps[i].as_i64().unwrap_or(0);
+        let ts = ts_val.as_i64().unwrap_or(0);
         let date = chrono::DateTime::from_timestamp(ts, 0)
             .map(|dt| dt.format("%Y-%m-%d").to_string())
             .unwrap_or_default();
 
         // 辅助函数：从 JSON 数组中取 f64 值，null 则跳过
-        let get_f64 = |arr: &Vec<Value>, idx: usize| -> Option<f64> {
-            arr.get(idx).and_then(|v| v.as_f64())
-        };
+        let get_f64 =
+            |arr: &Vec<Value>, idx: usize| -> Option<f64> { arr.get(idx).and_then(|v| v.as_f64()) };
 
         // 如果关键字段为 null（停牌日），跳过该行
         let (Some(o), Some(h), Some(l), Some(c)) = (
@@ -112,7 +124,10 @@ pub async fn fetch_us_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
     // 第一次尝试：直接请求
     match get_with_retry(&client, &url, Some(2)).await {
         Ok(resp) => {
-            let body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("读取响应失败: {}", e))?;
             parse_yahoo_response(symbol, &body)
         }
         Err(_) => {
@@ -123,7 +138,10 @@ pub async fn fetch_us_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
             let resp = get_with_retry(&client, &url, Some(2))
                 .await
                 .map_err(|e| format!("Yahoo Finance 请求失败({}): {}", symbol, e))?;
-            let body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("读取响应失败: {}", e))?;
             parse_yahoo_response(symbol, &body)
         }
     }
