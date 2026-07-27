@@ -125,8 +125,7 @@ Data sources are configured via:
 
 ## Implementation Notes
 
-Data fetching is implemented in Rust (`trad-data` binary) for US/HK/Crypto markets.
-China A-share market uses Python scripts (akshare) as fallback.
+Data fetching is implemented in Rust (`trad-data` binary) for all markets including US, HK, Crypto, and China A-shares.
 
 ### Rust Binary: trad-data
 - US stocks: Yahoo Finance v8/v10 API (direct HTTP)
@@ -134,9 +133,4 @@ China A-share market uses Python scripts (akshare) as fallback.
 - Crypto: Yahoo Finance API (same as US stocks)
 - News: Yahoo Finance + Google News RSS
 - Sentiment: StockTwits + Reddit JSON API
-
-### Python Fallback (China A-shares)
-- A-share OHLCV: AKShare (Eastmoney API wrapper)
-- A-share fundamentals: AKShare (Sina Finance + Eastmoney)
-- A-share news: AKShare (Eastmoney search API)
-- A-share sentiment: AKShare (Eastmoney comment API)
+- China A-shares: Eastmoney APIs (via Rust HTTP)

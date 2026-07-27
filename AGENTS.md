@@ -4,7 +4,7 @@
 
 An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `npx halfoffive/trad-skill`.
 
-The core deliverable is `tradingagents-analysis/` (SKILL.md + references/ + scripts/). There is no build, no test suite, no CI.
+The core deliverable is `tradingagents-analysis/` (SKILL.md + references/ + bin/). There is no build, no test suite, no CI.
 
 ## Structure
 
@@ -23,7 +23,7 @@ trad-skill/                        # repo root (meta files + installer)
     ├── references/prompts/        # VERBATIM prompts from source repos. Do NOT paraphrase.
     ├── references/data-sources.md # data source catalog
     ├── references/indicators.md   # technical indicator reference
-    └── scripts/*.py               # Python data-fetching helpers
+    └── bin/                       # trad-data Rust binary (platform-specific)
 ```
 
 ## Install commands
@@ -42,18 +42,9 @@ npx halfoffive/trad-skill
 
 - `bin.trad-skill` → `install.mjs`, a zero-dependency Node ESM script.
 - Copies the root `tradingagents-analysis/` copy into the target agent's skills dir. Default target: `~/.claude/skills/tradingagents-analysis` (Claude Code). Flags: `--dir <path>`, `--agent claude|agents|opencode`.
-- Idempotent (removes existing dir first). Prints next steps + absolute script paths on success.
+- Idempotent (removes existing dir first). Prints next steps on success.
 - The `files` field in `package.json` controls what npx packs: `install.mjs`, both `tradingagents-analysis/` locations (`skills/` + root copy), and the doc/LICENSE files. `.omo/` and `.codegraph/` are never packed.
 - Note: The standard `npx skills add` (vercel-labs/skills) is now the recommended universal method. The custom installer (`npx halfoffive/trad-skill`) is preserved for backward compatibility. Both locations (`skills/tradingagents-analysis/` and root `tradingagents-analysis/`) contain identical copies — the npm `files` field packs both.
-
-## Python script conventions
-
-- **Functional only** — no `class` keyword anywhere in `scripts/`.
-- **Chinese comments** — all `#` comments and docstrings in Chinese.
-- Dependencies: `yfinance`, `akshare`, `requests`, `pandas` (no other third-party).
-- Every function returns a formatted string (for LLM prompt injection), never raises.
-- Each script has an `argparse` CLI block under `if __name__ == "__main__":`.
-- Syntax check: `uv run python -c "import ast; ast.parse(open(f, encoding='utf-8').read())"`
 
 ## Source repos (read-only reference)
 
@@ -71,6 +62,4 @@ Prompts and methodology are distilled from these. When updating prompts, re-extr
 - No `requirements.txt` by design — deps are documented in README only.
 - Skill files live in `tradingagents-analysis/` subfolder — repo root is for meta files only.
 - Skill files now also live in `skills/tradingagents-analysis/` for vercel-labs/skills CLI discovery; root copy kept for install.mjs backward compat.
-- **Script paths must be absolute.** A sub-agent's CWD is the user's project, so `SKILL.md` instructs the main agent to resolve the installed skill dir and pass absolute script paths into each spawn. Don't reintroduce relative `scripts/...` invocations.
 - **`SKILL.md §2` makes the agent ask for the ticker first** when the user hasn't named one. Keep this prerequisite step.
-- `akshare` is a soft dependency: every script wraps `import akshare` in `try/except ImportError → ak = None` and degrades to an error string / yfinance fallback. Don't make it a hard import.

@@ -116,10 +116,7 @@ try {
   if (fs.existsSync(destDir)) {
     fs.rmSync(destDir, { recursive: true, force: true });
   }
-  fs.cpSync(SRC_DIR, destDir, {
-    recursive: true,
-    filter: (src) => path.basename(src) !== '__pycache__',
-  });
+  fs.cpSync(SRC_DIR, destDir, { recursive: true });
   // 复制 trad-data 二进制
   const srcBin = path.join(__dirname, 'bin');
   if (fs.existsSync(srcBin)) {
@@ -129,7 +126,6 @@ try {
   fail(`安装失败：${e.message}`);
 }
 
-const scriptsDir = path.join(destDir, 'scripts');
 console.log(`✓ 已安装 ${SKILL_NAME} → ${destDir}`);
 console.log('');
 // 检查 trad-data 二进制是否已安装
@@ -141,27 +137,14 @@ const hasBinary = fs.existsSync(path.join(binDir, platformKey, `trad-data${binEx
 console.log('下一步：');
 if (hasBinary) {
   console.log(`  ✓ trad-data 二进制已安装 (${platformKey})`);
-  console.log('  对于 US/HK/Crypto 市场数据，无需额外 Python 依赖。');
-  console.log('  对于中国A股市场（fallback），仍需安装 Python 依赖：');
-  console.log('     pip install yfinance akshare requests pandas');
 } else {
-  console.log(`  1. 安装 Python 依赖（脚本运行需要 / trad-data 二进制未找到）:`);
-  console.log('     pip install yfinance akshare requests pandas');
+  console.log('  ⚠ trad-data 二进制未找到，请确认安装包完整。');
 }
-console.log('  2. 重启你的 AI agent / 开一个新会话，让它加载该技能。');
-console.log('  3. 触发分析，例如："分析 AAPL" 或 "Analyze 600519" 。');
+console.log('  1. 重启你的 AI agent / 开一个新会话，让它加载该技能。');
+console.log('  2. 触发分析，例如："分析 AAPL" 或 "Analyze 600519" 。');
 console.log('');
-console.log('数据工具（Rust二进制，推荐）:');
+console.log('数据工具（Rust二进制）:');
 console.log('  trad-data stock --symbol AAPL');
 console.log('  trad-data fundamentals --symbol AAPL');
 console.log('  trad-data news --symbol AAPL');
 console.log('  trad-data sentiment --symbol AAPL');
-console.log('');
-console.log('Python脚本（fallback，中国市场数据需要）:');
-for (const s of ['fetch_stock_data.py', 'fetch_news.py', 'fetch_fundamentals.py', 'fetch_sentiment.py']) {
-  // path.resolve 把 scriptsDir 与脚本名合并为绝对路径（相对 scriptsDir 时也能解析）
-  // 旧版 path.join 在 parentDir 为相对路径（如 --dir ./foo）时输出 ./foo/.../script.py，
-  // 子代理 CWD 不在仓库根会找不到。resolve 后始终是绝对路径，且用 '/' 分隔便于跨平台复制粘贴。
-  const abs = path.resolve(scriptsDir, s).split(path.sep).join('/');
-  console.log(`  python "${abs}" ...`);
-}
