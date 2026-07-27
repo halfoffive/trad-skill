@@ -84,6 +84,12 @@ if (!fs.existsSync(srcSkill)) {
 
 // 确定目标父目录
 let parentDir;
+if (args.dir && args.agent) {
+  // --dir 和 --agent 语义互斥：--dir 是任意自定义路径，--agent 是预置目标。
+  // 同时指定会让"用哪个"产生歧义（曾有人 --dir foo --agent opencode 期望装到 foo
+  // 但实际走 --agent 分支装到 ~/.config/opencode/skills）。直接 fail，不静默选一个。
+  fail('不能同时指定 --dir 和 --agent（--dir 为自定义路径，--agent 为预置目标）');
+}
 if (args.dir) {
   // 展开 ~ 为 home 目录
   if (args.dir === '~') args.dir = home;
@@ -98,13 +104,15 @@ if (args.dir) {
   parentDir = AGENT_DIRS.claude;
 }
 
-const destDir = path.join(parentDir, SKILL_NAME);
+// 用 path.resolve 而非 path.join：--dir ./foo 相对路径时 destDir 也是绝对路径，
+// 与下方 scriptsDir 输出一致，避免 L126 显示相对路径误导用户（R6-28）
+const destDir = path.resolve(parentDir, SKILL_NAME);
 
-// 确保父目录存在
-fs.mkdirSync(parentDir, { recursive: true });
-
-// 幂等：先删旧目录再复制
+// 幂等：先删旧目录再复制（含 mkdirSync 父目录创建，统一在 try/catch 内）
+// 旧版本 mkdirSync 在 try/catch 之外，权限不足 / 路径非法时会抛裸 Node 堆栈；
+// 移入既有 try/catch 走 fail() 友好提示。
 try {
+  fs.mkdirSync(parentDir, { recursive: true });
   if (fs.existsSync(destDir)) {
     fs.rmSync(destDir, { recursive: true, force: true });
   }
@@ -112,6 +120,11 @@ try {
     recursive: true,
     filter: (src) => path.basename(src) !== '__pycache__',
   });
+  // 复制 trad-data 二进制
+  const srcBin = path.join(__dirname, 'bin');
+  if (fs.existsSync(srcBin)) {
+    fs.cpSync(srcBin, path.join(destDir, 'bin'), { recursive: true });
+  }
 } catch (e) {
   fail(`安装失败：${e.message}`);
 }
@@ -119,13 +132,36 @@ try {
 const scriptsDir = path.join(destDir, 'scripts');
 console.log(`✓ 已安装 ${SKILL_NAME} → ${destDir}`);
 console.log('');
+// 检查 trad-data 二进制是否已安装
+const binDir = path.join(__dirname, 'bin');
+const platformKey = `${os.platform()}-${os.arch()}`;
+const binExt = os.platform() === 'win32' ? '.exe' : '';
+const hasBinary = fs.existsSync(path.join(binDir, platformKey, `trad-data${binExt}`));
+
 console.log('下一步：');
-console.log(`  1. 安装 Python 依赖（脚本运行需要）:`);
-console.log('     pip install yfinance akshare requests pandas');
+if (hasBinary) {
+  console.log(`  ✓ trad-data 二进制已安装 (${platformKey})`);
+  console.log('  对于 US/HK/Crypto 市场数据，无需额外 Python 依赖。');
+  console.log('  对于中国A股市场（fallback），仍需安装 Python 依赖：');
+  console.log('     pip install yfinance akshare requests pandas');
+} else {
+  console.log(`  1. 安装 Python 依赖（脚本运行需要 / trad-data 二进制未找到）:`);
+  console.log('     pip install yfinance akshare requests pandas');
+}
 console.log('  2. 重启你的 AI agent / 开一个新会话，让它加载该技能。');
 console.log('  3. 触发分析，例如："分析 AAPL" 或 "Analyze 600519" 。');
 console.log('');
-console.log('脚本（绝对路径，子代理调用时使用）:');
+console.log('数据工具（Rust二进制，推荐）:');
+console.log('  trad-data stock --symbol AAPL');
+console.log('  trad-data fundamentals --symbol AAPL');
+console.log('  trad-data news --symbol AAPL');
+console.log('  trad-data sentiment --symbol AAPL');
+console.log('');
+console.log('Python脚本（fallback，中国市场数据需要）:');
 for (const s of ['fetch_stock_data.py', 'fetch_news.py', 'fetch_fundamentals.py', 'fetch_sentiment.py']) {
-  console.log(`  python "${path.join(scriptsDir, s).split(path.sep).join('/')}" ...`);
+  // path.resolve 把 scriptsDir 与脚本名合并为绝对路径（相对 scriptsDir 时也能解析）
+  // 旧版 path.join 在 parentDir 为相对路径（如 --dir ./foo）时输出 ./foo/.../script.py，
+  // 子代理 CWD 不在仓库根会找不到。resolve 后始终是绝对路径，且用 '/' 分隔便于跨平台复制粘贴。
+  const abs = path.resolve(scriptsDir, s).split(path.sep).join('/');
+  console.log(`  python "${abs}" ...`);
 }

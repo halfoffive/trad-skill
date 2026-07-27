@@ -20,7 +20,7 @@
 
 import argparse
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote_plus
 
 import requests
@@ -63,20 +63,61 @@ def _format_news_item(title: str, source: str, summary: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_news_time(item) -> "datetime | None":
+    """从 yfinance 新闻 item 提取发布时间，失败返回 None。
+
+    兼容 yfinance 多个版本的字段名：
+    - 新版：item["content"]["pubDate"]（ISO 8601 字符串，如 "2024-01-15T10:30:00Z"）
+    - 旧版：item["providerPublishTime"]（Unix 时间戳，秒或毫秒）
+    - 中间版：item["content"]["publishTime"]
+    """
+    if not isinstance(item, dict):
+        return None
+    content = item.get("content", item) if isinstance(item.get("content"), dict) else item
+    # 按优先级尝试多个字段
+    pub = (
+        content.get("pubDate")
+        or content.get("publishTime")
+        or item.get("providerPublishTime")
+    )
+    if pub is None:
+        return None
+    # Unix 时间戳（int/float）：秒（<1e12）或毫秒（>=1e12）
+    if isinstance(pub, (int, float)):
+        try:
+            return datetime.fromtimestamp(pub if pub < 1e12 else pub / 1000, tz=timezone.utc)
+        except (ValueError, OSError, OverflowError):
+            return None
+    # ISO 8601 字符串：兼容带 Z 后缀的 UTC 格式
+    if isinstance(pub, str):
+        try:
+            return datetime.fromisoformat(pub.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
 def fetch_yfinance_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -> str:
     """
     使用 yfinance 获取个股相关新闻。
 
     通过 yfinance Ticker.news 属性获取新闻列表，
-    返回 markdown 格式字符串，最多返回 limit 条。
+    按发布时间过滤到最近 `days` 天内，返回 markdown 格式字符串，
+    最多返回 limit 条。
 
     参数:
         symbol: 股票代码，如 "AAPL", "MSFT"
-        days: 获取最近多少天的新闻（默认7天）
+        days: 获取最近多少天的新闻（默认7天）。yfinance 本身不支持时间过滤，
+              此处对返回的 news 列表按 pubDate/providerPublishTime 做客户端过滤。
+              若个别 item 的时间字段缺失或解析失败，该条不计入 days 限制（保留），
+              避免因字段变更漏报近期新闻。
         limit: 最多返回条数
     返回:
         markdown 格式新闻字符串或错误信息
     """
+    # 钳制负数：days 至少 1 天，limit 至少 0（契约：函数不抛异常，参数语义可预期）
+    days = max(1, int(days))
+    limit = max(0, int(limit))
     # 使用 yfinance 获取个股新闻
     try:
         ticker = yf.Ticker(symbol)
@@ -86,11 +127,22 @@ def fetch_yfinance_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LI
         if not news_list:
             return f"未找到 {symbol} 的相关新闻。"
 
+        # days 客户端过滤：cutoff 为 days 天前的 UTC 时间
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         results = []
 
-        for item in news_list[:limit]:
+        for item in news_list:
+            if len(results) >= limit:
+                break
+            # days 过滤：能解析发布时间且早于 cutoff 的条目跳过；
+            # 解析失败的条目保留（避免字段变更导致漏报）
+            pub_time = _parse_news_time(item)
+            if pub_time is not None and pub_time < cutoff:
+                continue
             # yfinance 新闻格式：content 嵌套结构
-            content = item.get("content", item)
+            content = item.get("content", item) if isinstance(item, dict) else {}
+            if not isinstance(content, dict):
+                content = {}
             title = content.get("title", "无标题")
             # 提取新闻来源
             publisher = content.get("provider", {})
@@ -126,6 +178,10 @@ def fetch_google_news(query: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT
     返回:
         markdown 格式新闻字符串或错误信息
     """
+    # 钳制负数：days 至少 1，limit 至少 0（契约：函数不抛异常，参数语义可预期；
+    # items[:limit] / df.head(limit) 在 limit=-1 时会切掉最后 1 条，违背降本设计）
+    days = max(1, int(days))
+    limit = max(0, int(limit))
     # 构建 Google News RSS 搜索 URL
     encoded_query = quote_plus(query)
     url = f"https://news.google.com/rss/search?q={encoded_query}+when:{days}d&hl=en&gl=US&ceid=US:en"
@@ -186,6 +242,10 @@ def fetch_cn_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -
     返回:
         markdown 格式新闻字符串或错误信息
     """
+    # 钳制负数：days 至少 1，limit 至少 0（与 fetch_google_news / fetch_yfinance_news 一致；
+    # df.head(limit) 在 limit=-1 时会切掉最后 1 条，违背降本设计）
+    days = max(1, int(days))
+    limit = max(0, int(limit))
     # 优先尝试 akshare 获取A股新闻
     if ak is not None:
         try:
@@ -227,8 +287,13 @@ def fetch_news(symbol: str, days: int = 7, limit: int = DEFAULT_NEWS_LIMIT) -> s
     返回:
         markdown 格式新闻字符串
     """
+    # 契约守卫：非字符串 / 空串 / 纯空白返回错误字符串，不抛异常
+    if not isinstance(symbol, str):
+        return f"错误: 无效的股票代码 {symbol!r}"
     # 去除首尾空格
     symbol = symbol.strip()
+    if not symbol:
+        return "错误: 股票代码不能为空"
 
     # 判断是否为A股（6位纯数字）
     if symbol.isdigit() and len(symbol) == 6:
