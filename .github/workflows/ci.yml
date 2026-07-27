@@ -100,14 +100,14 @@ jobs:
 
       - name: Upload artifact (Unix)
         if: "!contains(matrix.target, 'windows')"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trad-data-${{ matrix.target }}
           path: crates/trad-data/target/${{ matrix.target }}/release/trad-data
 
       - name: Upload artifact (Windows)
         if: contains(matrix.target, 'windows')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trad-data-${{ matrix.target }}
           path: crates/trad-data/target/${{ matrix.target }}/release/trad-data.exe
