@@ -1,13 +1,13 @@
-mod market;
-mod indicators;
+mod format;
 mod fundamentals;
+mod http;
+mod indicators;
+mod market;
 mod news;
 mod sentiment;
-mod format;
-mod http;
 
-use clap::{Parser, Subcommand};
 use chrono::{Duration, Utc};
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "trad-data", about = "TradingAgents data fetcher")]
@@ -85,7 +85,9 @@ async fn main() -> anyhow::Result<()> {
             let today = Utc::now().format("%Y-%m-%d").to_string();
             let end_date = end.unwrap_or_else(|| today.clone());
             let start_date = start.unwrap_or_else(|| {
-                (Utc::now() - Duration::days(365)).format("%Y-%m-%d").to_string()
+                (Utc::now() - Duration::days(365))
+                    .format("%Y-%m-%d")
+                    .to_string()
             });
 
             if raw {
@@ -98,7 +100,10 @@ async fn main() -> anyhow::Result<()> {
                             print!("{}", format::ohlcv_to_csv(&data));
                         }
                     }
-                    Err(e) => { eprintln!("{}", e); std::process::exit(1); }
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
                 }
             } else {
                 // 默认模式：精简报告（指标 + 尾部 OHLCV）
@@ -116,7 +121,10 @@ async fn main() -> anyhow::Result<()> {
                         );
                         print!("{}", report);
                     }
-                    Err(e) => { eprintln!("{}", e); std::process::exit(1); }
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
                 }
             }
         }

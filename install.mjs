@@ -10,9 +10,9 @@ import fs from 'node:fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const home = os.homedir();
 
-// 源技能目录：本脚本同级的 tradingagents-analysis/
+// 源技能目录：本仓库 skills/ 下的 tradingagents-analysis/
 const SKILL_NAME = 'tradingagents-analysis';
-const SRC_DIR = path.join(__dirname, SKILL_NAME);
+const SRC_DIR = path.join(__dirname, 'skills', SKILL_NAME);
 
 // 不同 agent 的默认 skills 目录
 const AGENT_DIRS = {

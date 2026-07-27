@@ -12,7 +12,6 @@
   "files": [
     "install.mjs",
     "bin/",
-    "tradingagents-analysis/",
     "skills/",
     "README.md",
     "README_CN.md",
@@ -23,7 +22,7 @@
     "prepublishOnly": "echo 'NOTE: Ensure cargo build --release has been run and binaries are placed in bin/<platform>-<arch>/ before publishing.'"
   },
   "engines": {
-    "node": ">=16.7"
+    "node": ">=18"
   },
   "keywords": [
     "agent-skills",

@@ -4,7 +4,7 @@
 
 An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `npx halfoffive/trad-skill`.
 
-The core deliverable is `tradingagents-analysis/` (SKILL.md + references/ + bin/). There is no build, no test suite, no CI.
+The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ + bin/). Rust source lives in `crates/trad-data/` with CI (cargo fmt/clippy/test + 6-platform cross-build) in `.github/workflows/ci.yml`.
 
 ## Structure
 
@@ -12,18 +12,19 @@ The core deliverable is `tradingagents-analysis/` (SKILL.md + references/ + bin/
 trad-skill/                        # repo root (meta files + installer)
 ├── package.json                  # npx entry point (name: trad-skill)
 ├── install.mjs                   # zero-dependency installer
+├── bin/trad-data-wrapper.js      # cross-platform binary wrapper
 ├── README.md / README_CN.md       # bilingual docs with language switch
 ├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # this file
 ├── LICENSE                        # Apache 2.0
-├── skills/                        # ← vercel-labs/skills standard location
-│   └── tradingagents-analysis/    # ← the installable skill (standard path)
-└── tradingagents-analysis/        # ← the installable skill (root copy, backward compat)
-    ├── SKILL.md                   # skill entry point (YAML frontmatter). Keep under 500 lines.
-    ├── references/prompts/        # VERBATIM prompts from source repos. Do NOT paraphrase.
-    ├── references/data-sources.md # data source catalog
-    ├── references/indicators.md   # technical indicator reference
-    └── bin/                       # trad-data Rust binary (platform-specific)
+├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 6-platform build
+├── crates/trad-data/              # Rust binary source (trad-data)
+└── skills/
+    └── tradingagents-analysis/    # the installable skill
+        ├── SKILL.md               # skill entry point (YAML frontmatter)
+        ├── references/prompts/    # role prompts for each analyst
+        ├── references/data-sources.md
+        └── references/indicators.md
 ```
 
 ## Install commands
@@ -41,10 +42,10 @@ npx halfoffive/trad-skill
 ## Installer (`package.json` + `install.mjs`)
 
 - `bin.trad-skill` → `install.mjs`, a zero-dependency Node ESM script.
-- Copies the root `tradingagents-analysis/` copy into the target agent's skills dir. Default target: `~/.claude/skills/tradingagents-analysis` (Claude Code). Flags: `--dir <path>`, `--agent claude|agents|opencode`.
+- Copies `skills/tradingagents-analysis/` into the target agent's skills dir. Default target: `~/.claude/skills/tradingagents-analysis` (Claude Code). Flags: `--dir <path>`, `--agent claude|agents|opencode`.
+- Also copies `bin/` (trad-data Rust binary) into the skill directory.
 - Idempotent (removes existing dir first). Prints next steps on success.
-- The `files` field in `package.json` controls what npx packs: `install.mjs`, both `tradingagents-analysis/` locations (`skills/` + root copy), and the doc/LICENSE files. `.omo/` and `.codegraph/` are never packed.
-- Note: The standard `npx skills add` (vercel-labs/skills) is now the recommended universal method. The custom installer (`npx halfoffive/trad-skill`) is preserved for backward compatibility. Both locations (`skills/tradingagents-analysis/` and root `tradingagents-analysis/`) contain identical copies — the npm `files` field packs both.
+- The `files` field in `package.json` controls what npx packs: `install.mjs`, `bin/`, `skills/`, and the doc/LICENSE files.
 
 ## Source repos (read-only reference)
 
@@ -58,8 +59,7 @@ Prompts and methodology are distilled from these. When updating prompts, re-extr
 - `.omo/` is gitignored orchestration state — never commit it.
 - `.codegraph/` exists for indexing — ignore it.
 - `.trae/specs/` is the trae agent spec workflow state (spec.md / tasks.md / checklist.md), tracked in git; unlike `.omo/`, do NOT gitignore.
-- `uv` is available with bundled Python; use `uv run python` for script checks.
-- No `requirements.txt` by design — deps are documented in README only.
-- Skill files live in `tradingagents-analysis/` subfolder — repo root is for meta files only.
-- Skill files now also live in `skills/tradingagents-analysis/` for vercel-labs/skills CLI discovery; root copy kept for install.mjs backward compat.
+- `uv` is available; use `uv run python` for quick script checks if needed.
+- Skill files live in `skills/tradingagents-analysis/` — this is the single source of truth.
+- Rust source lives in `crates/trad-data/`. Run `cargo fmt`, `cargo clippy`, `cargo test` before committing.
 - **`SKILL.md §2` makes the agent ask for the ticker first** when the user hasn't named one. Keep this prerequisite step.

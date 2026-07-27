@@ -1,9 +1,9 @@
 use crate::market::OhlcvRow;
 
-/// 技术指标计算模块
-///
-/// 严格对齐 Python `compute_indicators()` (fetch_stock_data.py 第62-223行)
-/// 所有边缘情况处理与 Python 一致。
+// 技术指标计算模块
+//
+// 严格对齐 Python `compute_indicators()` (fetch_stock_data.py 第62-223行)
+// 所有边缘情况处理与 Python 一致。
 
 /// 格式化数值：round 到 4 位小数，非有限浮点数返回 "N/A"
 fn fmt_val(v: f64) -> String {
@@ -21,8 +21,8 @@ fn sma(data: &[f64], period: usize) -> Vec<f64> {
         return result;
     }
     let mut sum = 0.0;
-    for i in 0..period {
-        sum += data[i];
+    for &val in data.iter().take(period) {
+        sum += val;
     }
     result[period - 1] = sum / period as f64;
     for i in period..data.len() {
@@ -90,8 +90,8 @@ fn rolling_mean(data: &[f64], period: usize) -> Vec<f64> {
         return result;
     }
     let mut sum = 0.0;
-    for i in 0..period {
-        sum += data[i];
+    for &val in data.iter().take(period) {
+        sum += val;
     }
     result[period - 1] = sum / period as f64;
     for i in period..data.len() {
@@ -108,8 +108,8 @@ fn rolling_sum(data: &[f64], period: usize) -> Vec<f64> {
         return result;
     }
     let mut sum = 0.0;
-    for i in 0..period {
-        sum += data[i];
+    for &val in data.iter().take(period) {
+        sum += val;
     }
     result[period - 1] = sum;
     for i in period..data.len() {
@@ -173,19 +173,27 @@ pub fn compute_indicators(data: &[OhlcvRow]) -> String {
         }
         d
     };
-    let gain: Vec<f64> = delta.iter().map(|&d| if d > 0.0 { d } else { 0.0 }).collect();
-    let loss: Vec<f64> = delta.iter().map(|&d| if d < 0.0 { -d } else { 0.0 }).collect();
+    let gain: Vec<f64> = delta
+        .iter()
+        .map(|&d| if d > 0.0 { d } else { 0.0 })
+        .collect();
+    let loss: Vec<f64> = delta
+        .iter()
+        .map(|&d| if d < 0.0 { -d } else { 0.0 })
+        .collect();
     let avg_gain = ema_alpha(&gain, 1.0 / 14.0);
     let avg_loss = ema_alpha(&loss, 1.0 / 14.0);
 
     // RSI 计算：处理 avg_loss == 0 的边缘情况
-    let rsi: Vec<f64> = (0..n).map(|i| {
-        if avg_loss[i] == 0.0 {
-            100.0
-        } else {
-            100.0 - 100.0 / (1.0 + avg_gain[i] / avg_loss[i])
-        }
-    }).collect();
+    let rsi: Vec<f64> = (0..n)
+        .map(|i| {
+            if avg_loss[i] == 0.0 {
+                100.0
+            } else {
+                100.0 - 100.0 / (1.0 + avg_gain[i] / avg_loss[i])
+            }
+        })
+        .collect();
 
     // Bollinger(20, 2)：ddof=0（总体标准差）
     let boll_mid = rolling_mean(&close, 20);
@@ -201,41 +209,63 @@ pub fn compute_indicators(data: &[OhlcvRow]) -> String {
     let cv: Vec<f64> = (0..n).map(|i| close[i] * volume[i]).collect();
     let cv_sum = rolling_sum(&cv, 20);
     let vol_sum = rolling_sum(&volume, 20);
-    let vwma: Vec<f64> = (0..n).map(|i| {
-        if vol_sum[i].is_nan() || vol_sum[i] == 0.0 {
-            f64::NAN
-        } else {
-            cv_sum[i] / vol_sum[i]
-        }
-    }).collect();
+    let vwma: Vec<f64> = (0..n)
+        .map(|i| {
+            if vol_sum[i].is_nan() || vol_sum[i] == 0.0 {
+                f64::NAN
+            } else {
+                cv_sum[i] / vol_sum[i]
+            }
+        })
+        .collect();
 
     // MFI(14)：资金流量指标
-    let tp: Vec<f64> = (0..n).map(|i| (high[i] + low[i] + close[i]) / 3.0).collect();
+    let tp: Vec<f64> = (0..n)
+        .map(|i| (high[i] + low[i] + close[i]) / 3.0)
+        .collect();
     let mf: Vec<f64> = (0..n).map(|i| tp[i] * volume[i]).collect();
-    let pos: Vec<f64> = (0..n).map(|i| {
-        if i == 0 { 0.0 } else if tp[i] > tp[i - 1] { mf[i] } else { 0.0 }
-    }).collect();
-    let neg: Vec<f64> = (0..n).map(|i| {
-        if i == 0 { 0.0 } else if tp[i] < tp[i - 1] { mf[i] } else { 0.0 }
-    }).collect();
+    let pos: Vec<f64> = (0..n)
+        .map(|i| {
+            if i == 0 {
+                0.0
+            } else if tp[i] > tp[i - 1] {
+                mf[i]
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let neg: Vec<f64> = (0..n)
+        .map(|i| {
+            if i == 0 {
+                0.0
+            } else if tp[i] < tp[i - 1] {
+                mf[i]
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let pos_sum = rolling_sum(&pos, 14);
     let neg_sum = rolling_sum(&neg, 14);
-    let mfi: Vec<f64> = (0..n).map(|i| {
-        let ps = pos_sum[i];
-        let ns = neg_sum[i];
-        if ps.is_nan() || ns.is_nan() {
-            return f64::NAN;
-        }
-        if ps == 0.0 && ns == 0.0 {
-            50.0
-        } else if ns == 0.0 && ps > 0.0 {
-            100.0
-        } else if ps == 0.0 && ns > 0.0 {
-            0.0
-        } else {
-            100.0 - 100.0 / (1.0 + ps / ns)
-        }
-    }).collect();
+    let mfi: Vec<f64> = (0..n)
+        .map(|i| {
+            let ps = pos_sum[i];
+            let ns = neg_sum[i];
+            if ps.is_nan() || ns.is_nan() {
+                return f64::NAN;
+            }
+            if ps == 0.0 && ns == 0.0 {
+                50.0
+            } else if ns == 0.0 && ps > 0.0 {
+                100.0
+            } else if ps == 0.0 && ns > 0.0 {
+                0.0
+            } else {
+                100.0 - 100.0 / (1.0 + ps / ns)
+            }
+        })
+        .collect();
 
     // 取最后一行的最新值
     let px = close[last];
@@ -287,11 +317,28 @@ pub fn compute_indicators(data: &[OhlcvRow]) -> String {
         "| 指标 | 最新值 | 信号 |".to_string(),
         "|---|---|---|".to_string(),
         format!("| 收盘价 | {} | — |", fmt_val(px)),
-        format!("| SMA50 / SMA200 | {} / {} | {} |", fmt_val(sma50[last]), fmt_val(sma200[last]), cross),
+        format!(
+            "| SMA50 / SMA200 | {} / {} | {} |",
+            fmt_val(sma50[last]),
+            fmt_val(sma200[last]),
+            cross
+        ),
         format!("| EMA10 | {} | 短期动能 |", fmt_val(ema10[last])),
-        format!("| MACD / 信号 / 柱 | {} / {} / {} | {} |", fmt_val(macd[last]), fmt_val(signal[last]), fmt_val(hist[last]), macd_state),
+        format!(
+            "| MACD / 信号 / 柱 | {} / {} / {} | {} |",
+            fmt_val(macd[last]),
+            fmt_val(signal[last]),
+            fmt_val(hist[last]),
+            macd_state
+        ),
         format!("| RSI(14) | {} | {} |", fmt_val(rsi[last]), rsi_state),
-        format!("| Boll 中轨/上轨/下轨 | {} / {} / {} | {} |", fmt_val(boll_mid[last]), fmt_val(boll_ub[last]), fmt_val(boll_lb[last]), boll_pos),
+        format!(
+            "| Boll 中轨/上轨/下轨 | {} / {} / {} | {} |",
+            fmt_val(boll_mid[last]),
+            fmt_val(boll_ub[last]),
+            fmt_val(boll_lb[last]),
+            boll_pos
+        ),
         format!("| ATR(14) | {} | 波动率参考 |", fmt_val(atr[last])),
         format!("| VWMA(20) | {} | 量价趋势 |", fmt_val(vwma[last])),
         format!("| MFI(14) | {} | 资金流向 |", fmt_val(mfi[last])),
@@ -312,16 +359,27 @@ pub fn compute_stats(data: &[OhlcvRow]) -> String {
 
     let first = close[0];
     let last = close[n - 1];
-    let ret = if first != 0.0 { (last / first - 1.0) * 100.0 } else { f64::NAN };
+    let ret = if first != 0.0 {
+        (last / first - 1.0) * 100.0
+    } else {
+        f64::NAN
+    };
 
     // 日百分比收益 → 年化波动率（252 交易日）
-    let daily_ret: Vec<f64> = (1..n).map(|i| {
-        if close[i - 1] != 0.0 { (close[i] - close[i - 1]) / close[i - 1] } else { 0.0 }
-    }).collect();
+    let daily_ret: Vec<f64> = (1..n)
+        .map(|i| {
+            if close[i - 1] != 0.0 {
+                (close[i] - close[i - 1]) / close[i - 1]
+            } else {
+                0.0
+            }
+        })
+        .collect();
 
     let vol = if daily_ret.len() > 1 {
         let mean = daily_ret.iter().sum::<f64>() / daily_ret.len() as f64;
-        let variance = daily_ret.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (daily_ret.len() - 1) as f64;
+        let variance = daily_ret.iter().map(|r| (r - mean).powi(2)).sum::<f64>()
+            / (daily_ret.len() - 1) as f64;
         variance.sqrt() * (252.0_f64).sqrt() * 100.0
     } else {
         f64::NAN
@@ -334,14 +392,22 @@ pub fn compute_stats(data: &[OhlcvRow]) -> String {
     };
 
     // 52 周高低：取最近约 252 个交易日
-    let window = if n >= 252 { &close[n - 252..] } else { &close[..] };
+    let window = if n >= 252 {
+        &close[n - 252..]
+    } else {
+        &close[..]
+    };
     let hi = window.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let lo = window.iter().cloned().fold(f64::INFINITY, f64::min);
 
     fn fmt_num(v: f64, digits: u32) -> String {
         if v.is_finite() {
             let factor = 10.0_f64.powi(digits as i32);
-            format!("{:.prec$}", (v * factor).round() / factor, prec = digits as usize)
+            format!(
+                "{:.prec$}",
+                (v * factor).round() / factor,
+                prec = digits as usize
+            )
         } else {
             "N/A".to_string()
         }
@@ -351,8 +417,19 @@ pub fn compute_stats(data: &[OhlcvRow]) -> String {
         "## 区间统计\n".to_string(),
         format!("- 区间收益率: {}%", fmt_num(ret, 2)),
         format!("- 年化波动率: {}%", fmt_num(vol, 2)),
-        format!("- 日均成交量: {}", if avg_vol.is_finite() { format!("{}", avg_vol as i64) } else { "N/A".to_string() }),
-        format!("- 52周(或区间)高/低: {} / {}", fmt_num(hi, 4), fmt_num(lo, 4)),
+        format!(
+            "- 日均成交量: {}",
+            if avg_vol.is_finite() {
+                format!("{}", avg_vol as i64)
+            } else {
+                "N/A".to_string()
+            }
+        ),
+        format!(
+            "- 52周(或区间)高/低: {} / {}",
+            fmt_num(hi, 4),
+            fmt_num(lo, 4)
+        ),
     ];
 
     lines.join("\n") + "\n"

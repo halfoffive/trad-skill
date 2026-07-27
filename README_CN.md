@@ -3,7 +3,7 @@
 [English](README.md) | **中文**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 
 基于 [TradingAgents](https://github.com/TauricResearch/TradingAgents) 和 [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN) 的多智能体股票/加密货币分析 AI 技能。
 
@@ -92,10 +92,6 @@ curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tra
 for f in market_analyst sentiment_analyst news_analyst fundamentals_analyst bull_researcher bear_researcher research_manager trader aggressive_risk conservative_risk neutral_risk portfolio_manager china_market_analyst cn_news_analyst; do
   curl -sL "https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/prompts/${f}.md" -o ~/.claude/skills/tradingagents-analysis/references/prompts/${f}.md
 done
-mkdir -p ~/.claude/skills/tradingagents-analysis/scripts
-for f in fetch_stock_data.py fetch_news.py fetch_fundamentals.py fetch_sentiment.py; do
-  curl -sL "https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/scripts/${f}" -o ~/.claude/skills/tradingagents-analysis/scripts/${f}
-done
 ```
 
 **通用 / OpenCode（用户级）：** 将上面命令中的 `~/.claude/skills` 替换为 `~/.agents/skills`。
@@ -126,14 +122,14 @@ rm -rf /tmp/trad-skill
 ### A股特别说明
 
 - 股票代码使用6位纯数字格式（如 600519、000858）
-- 脚本内部根据 6 位代码前缀自动判断交易所（6 开头 → 上海 .SS；0/3 开头 → 深圳 .SZ），用户只需提供 6 位纯数字
+- `trad-data` 内部根据 6 位代码前缀自动判断交易所（6 开头 → 上海 .SS；0/3 开头 → 深圳 .SZ），用户只需提供 6 位纯数字
 - 数据源优先级：AKShare → yfinance
 - 支持中文新闻和情绪分析
 - 使用中国市场专用分析师提示词（`china_market_analyst.md`、`cn_news_analyst.md`）
 
 ### 港股特别说明
 
-- 使用 4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；脚本 `zfill(5)` 两种都接受）
+- 使用 4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；`trad-data` 的 `zfill(5)` 两种都接受）
 - 数据源：AKShare → yfinance
 - 支持港股通标的和港股主板股票
 
@@ -193,40 +189,36 @@ rm -rf /tmp/trad-skill
 ```
 trad-skill/                        # 仓库根目录（元文件 + 安装器）
 ├── package.json                  # npx 入口（name: trad-skill）
-├── install.mjs                   # 零依赖安装器（把技能复制到 agent 的 skills 目录）
-├── README.md                      # 英文文档
-├── README_CN.md                   # 本文件（中文文档）
+├── install.mjs                   # 零依赖安装器
+├── bin/trad-data-wrapper.js      # 跨平台二进制包装器
+├── README.md / README_CN.md       # 双语文档
 ├── CHANGELOG.md                   # 版本历史
 ├── AGENTS.md                      # AI 代理接入文档
 ├── LICENSE                        # Apache 2.0 许可证
-├── skills/                        # vercel-labs/skills 标准位置
-│   └── tradingagents-analysis/    # 可安装的技能（标准路径）
-└── tradingagents-analysis/        # 可安装的技能（根副本，向后兼容）
-    ├── SKILL.md                   # 核心技能指令文件
-    ├── references/
-    │   ├── prompts/               # 14个智能体角色提示词
-    │   │   ├── market_analyst.md       # 市场分析师
-    │   │   ├── sentiment_analyst.md    # 情绪分析师
-    │   │   ├── news_analyst.md         # 新闻分析师
-    │   │   ├── fundamentals_analyst.md # 基本面分析师
-    │   │   ├── bull_researcher.md      # 看多研究员
-    │   │   ├── bear_researcher.md      # 看空研究员
-    │   │   ├── research_manager.md     # 研究主管
-    │   │   ├── trader.md               # 交易员
-    │   │   ├── aggressive_risk.md      # 激进风控
-    │   │   ├── conservative_risk.md    # 保守风控
-    │   │   ├── neutral_risk.md         # 中性风控
-    │   │   ├── portfolio_manager.md    # 投资组合经理
-    │   │   ├── china_market_analyst.md # 中国市场分析师
-    │   │   ├── cn_news_analyst.md      # 中文新闻分析师
-    │   │   └── README.md               # 提示词索引
-    │   ├── data-sources.md         # 数据源目录（美股+A股+港股）
-    │   └── indicators.md           # 技术指标参考
-    └── scripts/
-        ├── fetch_stock_data.py     # 行情数据获取
-        ├── fetch_news.py           # 新闻数据获取
-        ├── fetch_fundamentals.py   # 基本面数据获取
-        └── fetch_sentiment.py      # 情绪数据获取
+├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 6平台构建
+├── crates/trad-data/              # Rust 二进制源码（trad-data）
+└── skills/
+    └── tradingagents-analysis/    # 可安装的技能
+        ├── SKILL.md               # 核心技能指令文件
+        └── references/
+            ├── prompts/               # 14个智能体角色提示词
+            │   ├── market_analyst.md       # 市场分析师
+            │   ├── sentiment_analyst.md    # 情绪分析师
+            │   ├── news_analyst.md         # 新闻分析师
+            │   ├── fundamentals_analyst.md # 基本面分析师
+            │   ├── bull_researcher.md      # 看多研究员
+            │   ├── bear_researcher.md      # 看空研究员
+            │   ├── research_manager.md     # 研究主管
+            │   ├── trader.md               # 交易员
+            │   ├── aggressive_risk.md      # 激进风控
+            │   ├── conservative_risk.md    # 保守风控
+            │   ├── neutral_risk.md         # 中性风控
+            │   ├── portfolio_manager.md    # 投资组合经理
+            │   ├── china_market_analyst.md # 中国市场分析师
+            │   ├── cn_news_analyst.md      # 中文新闻分析师
+            │   └── README.md               # 提示词索引
+            ├── data-sources.md         # 数据源目录（美股+A股+港股）
+            └── indicators.md           # 技术指标参考
 ```
 
 ---
@@ -253,55 +245,41 @@ trad-skill/                        # 仓库根目录（元文件 + 安装器）
 | Baostock | A股历史数据 | 免费 |
 | 通达信 TDX | 技术指标 | 免费 |
 
-详见 [references/data-sources.md](tradingagents-analysis/references/data-sources.md)。
+详见 [references/data-sources.md](skills/tradingagents-analysis/references/data-sources.md)。
 
 ---
 
-## 脚本
+## 数据工具（`trad-data`）
 
-Python 辅助脚本（函数式编程，中文注释），用于为分析师子代理**获取、精简并预计算**数据，永不抛异常——失败时打印错误信息，代理可据此回退。默认输出已精简，分析师在小 payload 上推理而非原始数据上做算术。
+数据通过 `trad-data` Rust 二进制文件获取，提供行情数据（OHLCV + 指标）、新闻、基本面和情绪数据，输出为紧凑格式，适合 LLM 提示词注入。二进制文件通过 `bin/` 分发，并通过 `bin/trad-data-wrapper.js` 实现跨平台兼容。
 
-> 代理必须用技能安装目录内的**绝对路径**来运行这些脚本（如 `~/.claude/skills/tradingagents-analysis/scripts/...`），因为子代理的工作目录是用户项目，而非技能文件夹。`SKILL.md` 已指示主代理在派生子代理前先解析该路径。
+> 代理必须用技能安装目录内的**绝对路径**来运行 `trad-data`（如 `~/.claude/skills/tradingagents-analysis/bin/trad-data`），因为子代理的工作目录是用户项目，而非技能文件夹。`SKILL.md` 已指示主代理在派生子代理前先解析该路径。
 
 ```bash
-# 在技能的 scripts/ 目录内手动测试（行情：尾部 OHLCV + 预计算指标 + 可选统计，默认精简）：
-python scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+# 行情数据：尾部 OHLCV + 预计算指标 + 可选统计
+trad-data market --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 或用绝对路径调用（代理实际调用方式）：
-python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+~/.claude/skills/tradingagents-analysis/bin/trad-data market --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
-# 旧行为：整段原始 CSV（token 开销大，慎用）
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --raw
-
-# 获取行情数据（A股）
-python scripts/fetch_stock_data.py --symbol 600519 --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
-
-# 获取新闻（美股，默认 --limit 8，摘要截断）
-python scripts/fetch_news.py --symbol AAPL --days 7 --limit 8
-
-# 获取新闻（A股）
-python scripts/fetch_news.py --symbol 600519 --days 7 --limit 8
+# 获取新闻（默认 --limit 8，摘要截断）
+trad-data news --symbol AAPL --days 7 --limit 8
 
 # 获取基本面（精简关键指标表 + 公司概况）
-python scripts/fetch_fundamentals.py --symbol AAPL
+trad-data fundamentals --symbol AAPL
 
-# 获取基本面（A股）
-python scripts/fetch_fundamentals.py --symbol 600519
-
-# 获取情绪数据（美股，默认 --limit 15）
-python scripts/fetch_sentiment.py --symbol AAPL --limit 15
-
-# 获取情绪数据（A股）
-python scripts/fetch_sentiment.py --symbol 600519
+# 获取情绪数据（默认 --limit 15）
+trad-data sentiment --symbol AAPL --limit 15
 ```
 
-> 脚本是**主要**数据源，必须优先尝试。它们不是硬性依赖是指：当某个脚本执行失败或数据源不可用时，代理**仅对脚本未能提供的部分**回退到网络搜索/浏览器工具——绝不跳过脚本直接用网页搜索。
+| 子命令 | 默认值（紧凑） | 扩展参数 |
+|---|---|---|
+| `market` | `--tail 30` + `--indicators` 开启 | `--stats`, `--raw` |
+| `news` | `--limit 8`，200字符摘要 | `--limit N`, `--days N` |
+| `fundamentals` | 精简关键指标表 | — |
+| `sentiment` | `--limit 15`，8条消息/帖子 | `--limit N` |
 
-### 依赖安装
-
-```bash
-pip install yfinance akshare requests pandas
-```
+`trad-data` 是**主要**数据源，优先尝试。它不是硬性依赖：当某个子命令执行失败或数据源不可用时，代理**仅对子命令未能提供的部分**回退到网络搜索/浏览器工具——绝不跳过二进制直接用网页搜索。
 
 ---
 

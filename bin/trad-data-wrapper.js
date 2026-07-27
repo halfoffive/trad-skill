@@ -15,8 +15,7 @@ try {
   execFileSync(binaryPath, process.argv.slice(2), { stdio: 'inherit' });
 } catch (e) {
   if (e.code === 'ENOENT') {
-    console.error(`trad-data binary not found for ${platform}-${arch}`);
-    console.error('Falling back to Python scripts. Install with: pip install yfinance akshare requests pandas');
+    console.error(`trad-data binary not found for ${platform}-${arch}. Please reinstall.`);
     process.exit(1);
   }
   throw e;

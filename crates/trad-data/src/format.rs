@@ -6,6 +6,7 @@ use crate::market::OhlcvRow;
 /// 默认模式：指标快照表 + 尾部 OHLCV（默认30行）
 /// `stats` 模式：附加区间统计
 /// `raw` 模式：纯 CSV 输出
+#[allow(clippy::too_many_arguments)]
 pub fn build_compact_report(
     symbol: &str,
     start: &str,
@@ -17,7 +18,10 @@ pub fn build_compact_report(
     raw: bool,
 ) -> String {
     if data.is_empty() {
-        return format!("错误: 未获取到 {} 在 {} 至 {} 的数据，请检查代码和日期范围。", symbol, start, end);
+        return format!(
+            "错误: 未获取到 {} 在 {} 至 {} 的数据，请检查代码和日期范围。",
+            symbol, start, end
+        );
     }
 
     // --raw 模式：纯 CSV 输出

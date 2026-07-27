@@ -26,15 +26,20 @@ pub async fn fetch_hk_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
     let resp = get_with_retry(&client, &url, Some(3))
         .await
         .map_err(|e| format!("东方财富港股 API 请求失败({}): {}", symbol, e))?;
-    let body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
 
     // 解析响应
-    let root: serde_json::Value = serde_json::from_str(&body)
-        .map_err(|e| format!("JSON 解析失败: {}", e))?;
+    let root: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))?;
 
-    let data = root.get("data")
+    let data = root
+        .get("data")
         .ok_or_else(|| format!("东方财富港股返回无 data 字段: {}", symbol))?;
-    let klines = data.get("klines")
+    let klines = data
+        .get("klines")
         .and_then(|k| k.as_array())
         .ok_or_else(|| format!("东方财富港股返回无 klines 数据: {}", symbol))?;
 

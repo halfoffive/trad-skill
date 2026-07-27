@@ -3,7 +3,7 @@
 **English** | [中文](README_CN.md)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 
 A multi-agent stock and crypto trading analysis skill for AI agents, inspired by [TradingAgents](https://github.com/TauricResearch/TradingAgents) and [TradingAgents-CN](https://github.com/hsliuping/TradingAgents-CN).
 
@@ -95,10 +95,6 @@ curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tra
 curl -sL https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/prompts/README.md -o ~/.claude/skills/tradingagents-analysis/references/prompts/README.md
 for f in market_analyst sentiment_analyst news_analyst fundamentals_analyst bull_researcher bear_researcher research_manager trader aggressive_risk conservative_risk neutral_risk portfolio_manager china_market_analyst cn_news_analyst; do
   curl -sL "https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/references/prompts/${f}.md" -o ~/.claude/skills/tradingagents-analysis/references/prompts/${f}.md
-done
-mkdir -p ~/.claude/skills/tradingagents-analysis/scripts
-for f in fetch_stock_data.py fetch_news.py fetch_fundamentals.py fetch_sentiment.py; do
-  curl -sL "https://raw.githubusercontent.com/halfoffive/trad-skill/main/skills/tradingagents-analysis/scripts/${f}" -o ~/.claude/skills/tradingagents-analysis/scripts/${f}
 done
 ```
 
@@ -193,40 +189,36 @@ Market auto-detection: 6-digit pure number (e.g., 600519, 000858) → A-shares, 
 ```
 trad-skill/                        # repo root (meta files + installer)
 ├── package.json                  # npx entry point (name: trad-skill)
-├── install.mjs                   # zero-dependency installer (copies skill into the agent's skills dir)
-├── README.md                      # This file (English)
-├── README_CN.md                   # Chinese documentation
-├── CHANGELOG.md                   # Version history
+├── install.mjs                   # zero-dependency installer
+├── bin/trad-data-wrapper.js      # cross-platform binary wrapper
+├── README.md / README_CN.md       # bilingual docs with language switch
+├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # AI-agent onboarding doc
 ├── LICENSE                        # Apache 2.0
-├── skills/                        # vercel-labs/skills standard location
-│   └── tradingagents-analysis/    # the installable skill (standard path)
-└── tradingagents-analysis/        # the installable skill (root copy, backward compat)
-    ├── SKILL.md                   # Core skill instructions (pipeline, orchestration, output format)
-    ├── references/
-    │   ├── prompts/               # 14 verbatim agent role prompts
-    │   │   ├── market_analyst.md
-    │   │   ├── sentiment_analyst.md
-    │   │   ├── news_analyst.md
-    │   │   ├── fundamentals_analyst.md
-    │   │   ├── bull_researcher.md
-    │   │   ├── bear_researcher.md
-    │   │   ├── research_manager.md
-    │   │   ├── trader.md
-    │   │   ├── aggressive_risk.md
-    │   │   ├── conservative_risk.md
-    │   │   ├── neutral_risk.md
-    │   │   ├── portfolio_manager.md
-    │   │   ├── china_market_analyst.md
-    │   │   ├── cn_news_analyst.md
-    │   │   └── README.md
-    │   ├── data-sources.md        # Data source catalog (US + CN markets)
-    │   └── indicators.md          # Technical indicator reference
-    └── scripts/
-        ├── fetch_stock_data.py    # Stock OHLCV data fetcher (US/A-shares/HK/Crypto)
-        ├── fetch_news.py          # News data fetcher (company news)
-        ├── fetch_fundamentals.py  # Fundamentals data fetcher (financial statements)
-        └── fetch_sentiment.py     # Sentiment data fetcher (StockTwits, Reddit)
+├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 6-platform build
+├── crates/trad-data/              # Rust binary source (trad-data)
+└── skills/
+    └── tradingagents-analysis/    # the installable skill
+        ├── SKILL.md               # Core skill instructions (pipeline, orchestration, output format)
+        └── references/
+            ├── prompts/           # 14 verbatim agent role prompts
+            │   ├── market_analyst.md
+            │   ├── sentiment_analyst.md
+            │   ├── news_analyst.md
+            │   ├── fundamentals_analyst.md
+            │   ├── bull_researcher.md
+            │   ├── bear_researcher.md
+            │   ├── research_manager.md
+            │   ├── trader.md
+            │   ├── aggressive_risk.md
+            │   ├── conservative_risk.md
+            │   ├── neutral_risk.md
+            │   ├── portfolio_manager.md
+            │   ├── china_market_analyst.md
+            │   ├── cn_news_analyst.md
+            │   └── README.md
+            ├── data-sources.md    # Data source catalog (US + CN markets)
+            └── indicators.md      # Technical indicator reference
 ```
 
 ---
@@ -245,50 +237,41 @@ trad-skill/                        # repo root (meta files + installer)
 | AKShare | A-shares/HK | Price, news, sentiment | Free |
 | Baostock | A-shares | Historical data | Free |
 
-See [references/data-sources.md](tradingagents-analysis/references/data-sources.md) for the full catalog with fallback strategies.
+See [references/data-sources.md](skills/tradingagents-analysis/references/data-sources.md) for the full catalog with fallback strategies.
 
 ---
 
-## Scripts
+## Data Tool (`trad-data`)
 
-Python helper scripts for data fetching, **compaction, and pre-computation**. Functional style, no class definitions. Each script outputs compact formatted text suitable for LLM prompt injection and never raises — on failure it prints an error message the agent can fall back from. By default the outputs are already trimmed so the analyst reasons over a small payload instead of raw data.
+Data is fetched by the `trad-data` Rust binary, which provides market data (OHLCV + indicators), news, fundamentals, and sentiment in a single compact output suitable for LLM prompt injection. The binary is distributed via `bin/` and invoked through `bin/trad-data-wrapper.js` for cross-platform compatibility.
 
-> The agent must run these scripts by their **absolute path** inside the installed skill directory (e.g. `~/.claude/skills/tradingagents-analysis/scripts/...`), because a sub-agent's working directory is the user's project, not the skill folder. The skill's `SKILL.md` instructs the main agent to resolve that path before spawning analysts.
+> The agent must run `trad-data` by its **absolute path** inside the installed skill directory (e.g. `~/.claude/skills/tradingagents-analysis/bin/trad-data`), because a sub-agent's working directory is the user's project, not the skill folder. The skill's `SKILL.md` instructs the main agent to resolve that path before spawning analysts.
 
 ```bash
-# Stock data: OHLCV tail + pre-computed indicators + optional stats (default; compact)
-python scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+# Stock data: OHLCV tail + pre-computed indicators + optional stats
+trad-data market --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Or by absolute path (how the agent invokes them):
-python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
-
-# Legacy full-range raw CSV (token-heavy, avoid)
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --raw
+~/.claude/skills/tradingagents-analysis/bin/trad-data market --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Fetch news (default --limit 8 per source, summaries truncated)
-python scripts/fetch_news.py --symbol AAPL --days 7 --limit 8
+trad-data news --symbol AAPL --days 7 --limit 8
 
 # Fetch fundamentals (compact key-metrics table + company profile)
-python scripts/fetch_fundamentals.py --symbol AAPL
+trad-data fundamentals --symbol AAPL
 
 # Fetch sentiment (default --limit 15)
-python scripts/fetch_sentiment.py --symbol AAPL --limit 15
+trad-data sentiment --symbol AAPL --limit 15
 ```
 
-| Script | Defaults (compact) | Expand flags |
+| Subcommand | Defaults (compact) | Expand flags |
 |---|---|---|
-| `fetch_stock_data.py` | `--tail 30` + `--indicators` on | `--stats`, `--raw` |
-| `fetch_news.py` | `--limit 8`, 200-char summaries | `--limit N`, `--days N` |
-| `fetch_fundamentals.py` | compact key-metrics table | — |
-| `fetch_sentiment.py` | `--limit 15`, 8 messages/posts shown | `--limit N` |
+| `market` | `--tail 30` + `--indicators` on | `--stats`, `--raw` |
+| `news` | `--limit 8`, 200-char summaries | `--limit N`, `--days N` |
+| `fundamentals` | compact key-metrics table | — |
+| `sentiment` | `--limit 15`, 8 messages/posts shown | `--limit N` |
 
-### Dependencies
-
-```bash
-pip install yfinance akshare requests pandas
-```
-
-Scripts are the **primary** data source and are tried first. They are not hard dependencies in the sense that, if a script errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts the script could not provide** — it never skips the scripts outright.
+`trad-data` is the **primary** data source and is tried first. It is not a hard dependency in the sense that, if a subcommand errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts the command could not provide** — it never skips the binary outright.
 
 ---
 

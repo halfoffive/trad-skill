@@ -29,7 +29,10 @@ pub async fn fetch_cn_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
     let resp = get_with_retry(&client, &url, Some(3))
         .await
         .map_err(|e| format!("东方财富 API 请求失败({}): {}", symbol, e))?;
-    let body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
 
     parse_eastmoney_response(symbol, &body)
 }
@@ -39,13 +42,21 @@ pub async fn fetch_cn_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
 /// klines 是逗号分隔字符串数组，字段顺序:
 /// 日期,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率[,股票代码]
 fn parse_eastmoney_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, String> {
-    let root: serde_json::Value = serde_json::from_str(body)
-        .map_err(|e| format!("JSON 解析失败: {}", e))?;
+    let root: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| format!("JSON 解析失败: {}", e))?;
 
-    let data = root.get("data").ok_or_else(|| format!("东方财富返回无 data 字段: {}", symbol))?;
-    let klines = data.get("klines")
+    let data = root
+        .get("data")
+        .ok_or_else(|| format!("东方财富返回无 data 字段: {}", symbol))?;
+    let klines = data
+        .get("klines")
         .and_then(|k| k.as_array())
-        .ok_or_else(|| format!("东方财富返回无 klines 数据: {} (可能代码错误或无交易记录)", symbol))?;
+        .ok_or_else(|| {
+            format!(
+                "东方财富返回无 klines 数据: {} (可能代码错误或无交易记录)",
+                symbol
+            )
+        })?;
 
     let mut rows = Vec::new();
     for line in klines {
