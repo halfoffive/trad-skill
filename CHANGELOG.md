@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-07-27
+
+### Added
+
+- **npm auto-publish**: release workflow now publishes to npm automatically on tag push (requires `NPM_TOKEN` secret in GitHub Actions).
+- **npm provenance**: published packages include provenance attestation for supply-chain transparency.
+
+### Fixed
+
+- **README.md restored**: accidentally deleted in commit 116c687 ("屏蔽trae ide文件"); restored from git history.
+- **release.yml workflow_dispatch**: `inputs.tag` was defined but never used; manual dispatch now correctly resolves the tag for changelog extraction.
+- **Artifact action versions**: release.yml unified from v4 to v7 (matching ci.yml).
+- **Version sync**: Cargo.toml and http.rs user-agent bumped from 0.1.0 to 1.4.0 (matching package.json).
+- **Removed no-op prepublishOnly**: the echo-only script added no value for automated publishing.
+
+### Changed
+
+- `package.json` `version`: `1.3.6` → `1.4.0`.
+- `crates/trad-data/Cargo.toml` `version`: `0.1.0` → `1.4.0`.
+
 ## [1.3.6] - 2026-07-26
 
 ### Fixed (round 6)

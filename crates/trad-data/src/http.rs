@@ -16,7 +16,7 @@ pub fn build_client() -> Result<Client> {
     let client = Client::builder()
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
         .connect_timeout(Duration::from_secs(10))
-        .user_agent("trad-data/0.1.0")
+        .user_agent("trad-data/1.4.0")
         .build()?;
     Ok(client)
 }

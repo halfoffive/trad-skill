@@ -1,6 +1,6 @@
 {
   "name": "trad-skill",
-  "version": "1.3.6",
+  "version": "1.4.0",
   "description": "Installable TradingAgents multi-agent stock-analysis skill (Claude Code / Cursor / Windsurf / Trae / OpenCode via vercel-labs/skills)",
   "license": "Apache-2.0",
   "repository": "github:halfoffive/trad-skill",
@@ -18,9 +18,6 @@
     "CHANGELOG.md",
     "LICENSE"
   ],
-  "scripts": {
-    "prepublishOnly": "echo 'NOTE: Ensure cargo build --release has been run and binaries are placed in bin/<platform>-<arch>/ before publishing.'"
-  },
   "engines": {
     "node": ">=18"
   },
