@@ -22,7 +22,9 @@ After installation, the skill will be available at one of these locations (check
 - `~/.agents/skills/tradingagents-analysis` (OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
 - `~/.config/opencode/skills/tradingagents-analysis` (OpenCode global)
 
-Python dependencies (install if scripts fail):
+Data tool (Rust binary, recommended):
+  The `trad-data` binary is included. No Python required for US/HK/Crypto markets.
+  For China A-share market fallback, Python is still needed:
 ```bash
 pip install yfinance akshare requests pandas
 ```
@@ -151,7 +153,8 @@ Use background task spawning for parallelism:
 task(subagent_type="general", run_in_background=true,
      prompt="<role prompt contents>\n\nAnalyze {ticker} as of {date}.\n" +
             "Gather data FIRST by running the script, then write your report.\n" +
-            "Run: python \"{SCRIPTS_DIR}/{script_name}\" {script_args}\n" +
+            "Run: \"{SKILL_DIR}/bin/trad-data-wrapper.js\" {subcommand} --symbol {ticker} ...\n" +
+            "or (if binary available): \"{SKILL_DIR}/bin/{platform}/{binary}\" {subcommand} --symbol {ticker} ...\n" +
             "The script output is ALREADY compact and (for market data) pre-computes indicators — " +
             "it is your data source AND your verified snapshot; do NOT call get_stock_data / " +
             "get_indicators / get_verified_market_snapshot or any other tool name, they do not exist. " +
@@ -234,12 +237,14 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 Helper scripts live in this skill's `scripts/` directory. They fetch, **compact, and pre-compute** data for the analyst sub-agents — so the analyst interprets a small payload instead of burning tokens on raw data and arithmetic. **Run them with their absolute path** (see the "Resolve the skill directory first" note in Section 4); each script prints a formatted string (CSV or markdown) ready for prompt injection and never raises — on failure it prints an error message the analyst can fall back from.
 
-| Script | Purpose | Invocation |
+| Command | Purpose | Invocation |
 |---|---|---|
-| `fetch_stock_data.py` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). Flags: `--indicators`/`--no-indicators` (default on), `--stats`/`--no-stats` (default off), `--raw` (legacy full-range CSV, token-heavy, avoid), `--tail N` (default 30). | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
-| `fetch_news.py` | Company news (US: yfinance + Google News RSS; A股: 东方财富/akshare). Default `--limit 8` per source; all summaries truncated. | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7 --limit 8` |
-| `fetch_fundamentals.py` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `python "<skill>/scripts/fetch_fundamentals.py" --symbol AAPL` |
-| `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit (A股: 机构参与度/akshare). Default `--limit 15`; message/post displays trimmed. | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 15` |
+| `trad-data stock` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). | `trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
+| `trad-data news` | Company news (US: Yahoo Finance + Google News RSS; A股: fallback to Python). Default `--limit 8` per source; all summaries truncated. | `trad-data news --symbol AAPL --days 7 --limit 8` |
+| `trad-data fundamentals` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `trad-data fundamentals --symbol AAPL` |
+| `trad-data sentiment` | Social sentiment from StockTwits, Reddit (A股: fallback to Python). Default `--limit 15`; message/post displays trimmed. | `trad-data sentiment --symbol AAPL --limit 15` |
+
+> **China A-share fallback**: When `trad-data` returns data indicating CN market (6-digit symbol), fall back to Python scripts: `python "<skill>/scripts/fetch_stock_data.py" --symbol 600519 ...`
 
 > **Default date window for `fetch_stock_data.py`.** 对 `fetch_stock_data.py`，若未传 `--start`/`--end`，脚本默认取今天往前 1 年到今天（至少需 200 个交易日才能算 SMA200）；如需分析历史交易日，请显式传 `--start`/`--end`。
 
