@@ -22,7 +22,9 @@ After installation, the skill will be available at one of these locations (check
 - `~/.agents/skills/tradingagents-analysis` (OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
 - `~/.config/opencode/skills/tradingagents-analysis` (OpenCode global)
 
-Python dependencies (install if scripts fail):
+Data tool (Rust binary, recommended):
+  The `trad-data` binary is included. No Python required for US/HK/Crypto markets.
+  For China A-share market fallback, Python is still needed:
 ```bash
 pip install yfinance akshare requests pandas
 ```
@@ -128,7 +130,7 @@ Spawn **four parallel sub-agents**, one per analyst role. Each sub-agent receive
    - `references/prompts/news_analyst.md`
    - `references/prompts/fundamentals_analyst.md`
 
-   > **CN market prompt swap.** 当 `market` 为 A 股或港股时，用 `references/prompts/china_market_analyst.md` 替换 `market_analyst.md`，用 `references/prompts/cn_news_analyst.md` 替换 `news_analyst.md`；其余 3 个分析师（Sentiment / Fundamentals / Bull-Bear-Researcher 等）保持不变。
+   > **CN market prompt swap.** 当 `market` 为 A 股或港股时，用 `references/prompts/china_market_analyst.md` 替换 `market_analyst.md`，用 `references/prompts/cn_news_analyst.md` 替换 `news_analyst.md`；其余 2 个分析师（Sentiment / Fundamentals）保持不变。Stage 2 及之后的 researcher / manager / risk debator 等角色不受 `market` 影响（其 prompt 通用，不区分市场）。
 3. The **absolute path** to its data script (see Section 6).
 
 ### Resolve the skill directory first (important)
@@ -151,7 +153,8 @@ Use background task spawning for parallelism:
 task(subagent_type="general", run_in_background=true,
      prompt="<role prompt contents>\n\nAnalyze {ticker} as of {date}.\n" +
             "Gather data FIRST by running the script, then write your report.\n" +
-            "Run: python \"{SCRIPTS_DIR}/{script_name}\" {script_args}\n" +
+            "Run: \"{SKILL_DIR}/bin/trad-data-wrapper.js\" {subcommand} --symbol {ticker} ...\n" +
+            "or (if binary available): \"{SKILL_DIR}/bin/{platform}/{binary}\" {subcommand} --symbol {ticker} ...\n" +
             "The script output is ALREADY compact and (for market data) pre-computes indicators — " +
             "it is your data source AND your verified snapshot; do NOT call get_stock_data / " +
             "get_indicators / get_verified_market_snapshot or any other tool name, they do not exist. " +
@@ -160,6 +163,8 @@ task(subagent_type="general", run_in_background=true,
 ```
 
 Substitute the correct script name **and** args per analyst (see Section 6) — replace `{script_name}` and `{script_args}` per the §6 table. **Scripts are the primary data source** — the analyst must run its assigned script before writing its report; web search / browser tools are a fallback only when a script fails or returns no data for a given source.
+
+> **Template variables in verbatim prompts.** The role prompts in `references/prompts/` contain LangChain-style variables (`{ticker}`, `{current_date}`, `{instrument_context}`, `{get_language_instruction()}`, `{tool_names}`, `{NO_EXTERNAL_TOOLS}`, and ~24 others — 30 in total). **Substitute them before spawning** per the table in `references/prompts/README.md` (§ "Template Variable Substitution"). Quick reference: `{ticker}` → ticker; `{target_label}` → `stock` (equities) or `asset` (crypto); `{asset_label}` → `company` (equities) or `asset` (crypto); `{fundamentals_label}` → `Company fundamentals report` (equities) or `Asset fundamentals report (may be unavailable for crypto)` (crypto); `{current_date}` → today; `{start_date}`/`{end_date}` → analysis window; `{instrument_context}` → `Market: <US/A股/港股/Crypto>; Ticker: <symbol>; Trade date: <date>`; `{get_language_instruction()}` → empty string (English) or ` Write your entire response in <lang>.` (non-English); `{tool_names}`/`{system_message}`/`{lessons_line}` → empty string; `{NO_EXTERNAL_TOOLS}` → empty (not set — fallback permitted); data-report variables (`{market_research_report}` etc.) → bound to stage outputs per "Re-injection discipline" below.
 
 > **Token discipline.** Each analyst report must be **concise (target ≤ 400 words)** and structured as: a `## Key Signals` block of 5–8 actionable bullets at the top, a short evidence section referencing the script's key numbers (not reproducing the raw output), and one summary table. The `## Key Signals` block is what downstream stages consume — keep it self-contained. This overrides any "very detailed" phrasing in the verbatim role prompt: be evidence-dense, not verbose.
 
@@ -178,7 +183,7 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 > **Re-injection discipline (biggest token lever).** The verbatim role prompts bind the four analyst reports via template variables (`{market_research_report}`, `{sentiment_report}`, `{news_report}`, `{fundamentals_report}`). To avoid re-sending four full reports on every debate round:
 > - **Stages 2 & 5** (debates): bind those four variables to each report's **`## Key Signals` digest only**, not the full body. The `{history}` variable still carries the running debate transcript (naturally paragraph-sized, not full reports).
-> - **Stage 6** (Portfolio Manager): bind the **full reports + full transcript** once — the final synthesis deserves complete context, and it happens a single time.
+> - **Stage 6** (Portfolio Manager): `portfolio_manager.md` does **not** define `{market_research_report}` / `{sentiment_report}` / `{news_report}` / `{fundamentals_report}` slots in its body — only `{research_plan}`, `{trader_plan}`, `{history}` (risk debate transcript), and `{lessons_line}`. So bind `{research_plan}` to the Research Manager plan, `{trader_plan}` to the Trader proposal, `{history}` to the full risk-debate transcript, and **append the four full analyst reports as out-of-template context** (e.g., prepend them to the prompt as a `## Analyst Reports` section). The final synthesis deserves complete context, and it happens a single time.
 > Extract the `## Key Signals` block from each analyst report before feeding it into the debate prompts; keep the full reports aside for the Portfolio Manager.
 
 ---
@@ -209,7 +214,7 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 ### Stage 4: Trader
 
 - **Data**: the investment plan.
-- **Prompt**: `references/prompts/trader.md`.
+- **Prompt**: `references/prompts/trader.md`. **Note (R6-25):** `trader.md` has separate `## System Message` and `## User Message` code blocks — construct the LLM call with both roles (system message = the System Message block, user message = the User Message block with `{research_plan}` / `{lessons_line}` substituted). Do not concatenate them into a single prompt.
 - **Output**: a transaction proposal with entry/exit levels, position sizing, and time horizon.
 - **Handoff**: the proposal goes to the Risk Debate.
 
@@ -232,12 +237,14 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 Helper scripts live in this skill's `scripts/` directory. They fetch, **compact, and pre-compute** data for the analyst sub-agents — so the analyst interprets a small payload instead of burning tokens on raw data and arithmetic. **Run them with their absolute path** (see the "Resolve the skill directory first" note in Section 4); each script prints a formatted string (CSV or markdown) ready for prompt injection and never raises — on failure it prints an error message the analyst can fall back from.
 
-| Script | Purpose | Invocation |
+| Command | Purpose | Invocation |
 |---|---|---|
-| `fetch_stock_data.py` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). Use `--stats` for return/volatility/52w range; `--raw` for the legacy full-range CSV (token-heavy, avoid). | `python "<skill>/scripts/fetch_stock_data.py" --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
-| `fetch_news.py` | Company news (US: yfinance + Google News RSS; A股: 东方财富/akshare). Default `--limit 8` per source; all summaries truncated. | `python "<skill>/scripts/fetch_news.py" --symbol AAPL --days 7 --limit 8` |
-| `fetch_fundamentals.py` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `python "<skill>/scripts/fetch_fundamentals.py" --symbol AAPL` |
-| `fetch_sentiment.py` | Social sentiment from StockTwits, Reddit (A股: 机构参与度/akshare). Default `--limit 15`; message/post displays trimmed. | `python "<skill>/scripts/fetch_sentiment.py" --symbol AAPL --limit 15` |
+| `trad-data stock` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). | `trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
+| `trad-data news` | Company news (US: Yahoo Finance + Google News RSS; A股: fallback to Python). Default `--limit 8` per source; all summaries truncated. | `trad-data news --symbol AAPL --days 7 --limit 8` |
+| `trad-data fundamentals` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `trad-data fundamentals --symbol AAPL` |
+| `trad-data sentiment` | Social sentiment from StockTwits, Reddit (A股: fallback to Python). Default `--limit 15`; message/post displays trimmed. | `trad-data sentiment --symbol AAPL --limit 15` |
+
+> **China A-share fallback**: When `trad-data` returns data indicating CN market (6-digit symbol), fall back to Python scripts: `python "<skill>/scripts/fetch_stock_data.py" --symbol 600519 ...`
 
 > **Default date window for `fetch_stock_data.py`.** 对 `fetch_stock_data.py`，若未传 `--start`/`--end`，脚本默认取今天往前 1 年到今天（至少需 200 个交易日才能算 SMA200）；如需分析历史交易日，请显式传 `--start`/`--end`。
 

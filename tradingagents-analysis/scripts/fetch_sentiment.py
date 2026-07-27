@@ -36,12 +36,17 @@ def fetch_stocktwits(symbol: str, limit: int = DEFAULT_SENTIMENT_LIMIT) -> str:
 
     参数:
         symbol: 股票代码，如 AAPL
-        limit: 获取消息数量上限，默认 30
+        limit: 获取消息数量上限，默认 15
 
     返回:
         格式化的情绪报告字符串，API 不可用时返回 "<unavailable>"
     """
+    # 钳制负数：limit 至少 0（契约：函数不抛异常，参数语义可预期；
+    # messages[:limit] 在 limit=-1 时会切掉最后 1 条，违背降本设计）
+    limit = max(0, int(limit))
     # 构造 StockTwits API 请求地址
+    # 注：symbol 未做 URL 编码；常见股票代码（含 . / -）经实测可被 StockTwits API 接受，
+    # 若传入含 & / = / ? / # 等特殊字符的代码（极罕见），URL 会被破坏（已知限制，R6-19）
     url = f"https://api.stocktwits.com/api/2/streams/symbol/{symbol}.json"
 
     try:
@@ -121,6 +126,8 @@ def fetch_reddit_sentiment(symbol: str, days: int = 7) -> str:
     返回:
         格式化的帖子列表字符串，被拦截时返回 "<unavailable>"
     """
+    # 钳制负数：days 至少 1（契约：函数不抛异常；time_filter 计算依赖 days 语义可预期）
+    days = max(1, int(days))
     # 设置 User-Agent 避免被 Reddit 拦截
     headers = {
         "User-Agent": "TradingAgents-Skill/1.0"
@@ -137,6 +144,8 @@ def fetch_reddit_sentiment(symbol: str, days: int = 7) -> str:
 
     for subreddit in subreddits:
         # 构造 Reddit 搜索 API 地址
+        # 注：symbol 未做 URL 编码；常见股票代码（含 . / -）经实测可被 Reddit API 接受，
+        # 若传入含 & / = / ? / # 等特殊字符的代码（极罕见），URL 会被破坏（已知限制，R6-19）
         url = (
             f"https://www.reddit.com/r/{subreddit}/search.json"
             f"?q={symbol}&sort=new&t={time_filter}&limit=10"
@@ -265,6 +274,13 @@ def fetch_sentiment(symbol: str, limit: int = DEFAULT_SENTIMENT_LIMIT) -> str:
     返回:
         综合情绪报告字符串
     """
+    # 契约守卫：非字符串 / 空串 / 纯空白返回错误字符串，不抛异常
+    if not isinstance(symbol, str):
+        return f"错误: 无效的股票代码 {symbol!r}"
+    symbol = symbol.strip()
+    if not symbol:
+        return "错误: 股票代码不能为空"
+
     # 判断是否为A股代码（6位纯数字）
     if symbol.isdigit() and len(symbol) == 6:
         return fetch_cn_sentiment(symbol)

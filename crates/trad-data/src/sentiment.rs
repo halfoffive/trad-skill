@@ -1,0 +1,424 @@
+/// 市场情绪数据获取模块
+///
+/// 支持多数据源情绪数据获取：
+/// - StockTwits（美股社交情绪）
+/// - Reddit（美股社区讨论）
+/// - 东方财富千股千评 / 机构参与度（A股）
+///
+/// 对齐 Python fetch_sentiment.py 的输出格式。
+use serde_json::Value;
+
+use crate::http::{build_client, get_with_retry};
+use crate::market::{detect_market, Market};
+
+/// 最近消息展示条数
+const RECENT_MESSAGE_DISPLAY: usize = 8;
+/// Reddit 帖子展示条数
+const REDDIT_POST_DISPLAY: usize = 8;
+
+// ───────────────────────── StockTwits ─────────────────────────
+
+/// 获取 StockTwits 情绪数据
+async fn fetch_stocktwits(symbol: &str, limit: u32) -> String {
+    let url = format!(
+        "https://api.stocktwits.com/api/2/streams/symbol/{}.json",
+        symbol
+    );
+
+    let client = match build_client() {
+        Ok(c) => c,
+        Err(_) => return "<unavailable>".to_string(),
+    };
+
+    let resp = match get_with_retry(&client, &url, Some(1)).await {
+        Ok(r) => r,
+        Err(_) => return "<unavailable>".to_string(),
+    };
+
+    let data: Value = match resp.json().await {
+        Ok(v) => v,
+        Err(_) => return "<unavailable>".to_string(),
+    };
+
+    let messages = match data.get("messages").and_then(|m| m.as_array()) {
+        Some(arr) if !arr.is_empty() => arr,
+        _ => return format!("# StockTwits 情绪 ({})\n\n> 无消息数据\n", symbol),
+    };
+
+    let mut bullish_count = 0u32;
+    let mut bearish_count = 0u32;
+    let mut neutral_count = 0u32;
+    let mut recent_messages = Vec::new();
+
+    let display_limit = limit.min(messages.len() as u32) as usize;
+    for msg in messages.iter().take(display_limit) {
+        // 提取情绪标签
+        let basic = msg
+            .get("entities")
+            .and_then(|e| e.get("sentiment"))
+            .and_then(|s| s.get("basic"))
+            .and_then(|b| b.as_str())
+            .unwrap_or("");
+
+        match basic {
+            "Bullish" => bullish_count += 1,
+            "Bearish" => bearish_count += 1,
+            _ => neutral_count += 1,
+        }
+
+        // 提取消息体
+        if let Some(body) = msg.get("body").and_then(|b| b.as_str()) {
+            if !body.is_empty() {
+                let truncated = if body.chars().count() > 200 {
+                    let t: String = body.chars().take(200).collect();
+                    format!("{}...", t)
+                } else {
+                    body.to_string()
+                };
+                recent_messages.push(format!("- {}", truncated));
+            }
+        }
+    }
+
+    // 计算看涨/看跌比例
+    let total_tagged = bullish_count + bearish_count;
+    let (bullish_pct, bearish_pct) = if total_tagged > 0 {
+        (
+            (bullish_count as f64 / total_tagged as f64 * 100.0 * 10.0).round() / 10.0,
+            (bearish_count as f64 / total_tagged as f64 * 100.0 * 10.0).round() / 10.0,
+        )
+    } else {
+        (0.0, 0.0)
+    };
+
+    let mut sections = Vec::new();
+    sections.push(format!("# StockTwits 情绪 ({})\n", symbol));
+    sections.push("## 情绪统计\n".to_string());
+    sections.push(format!(
+        "- **看涨 (Bullish)**: {} ({:.1}%)",
+        bullish_count, bullish_pct
+    ));
+    sections.push(format!(
+        "- **看跌 (Bearish)**: {} ({:.1}%)",
+        bearish_count, bearish_pct
+    ));
+    sections.push(format!("- **中性/未标注**: {}", neutral_count));
+    sections.push(String::new());
+    sections.push("## 最近消息\n".to_string());
+    for msg in recent_messages.iter().take(RECENT_MESSAGE_DISPLAY) {
+        sections.push(msg.clone());
+    }
+
+    sections.join("\n")
+}
+
+// ───────────────────────── Reddit ─────────────────────────
+
+/// 获取 Reddit 情绪数据
+async fn fetch_reddit_sentiment(symbol: &str, days: u32) -> String {
+    let days = days.max(1);
+    let time_filter = if days <= 7 { "week" } else { "month" };
+    let subreddits = ["wallstreetbets", "stocks", "investing"];
+
+    let client = match build_client() {
+        Ok(c) => c,
+        Err(_) => return "<unavailable>".to_string(),
+    };
+
+    let mut all_posts: Vec<RedditPost> = Vec::new();
+
+    for subreddit in &subreddits {
+        let url = format!(
+            "https://www.reddit.com/r/{}/search.json?q={}&sort=new&t={}&limit=10",
+            subreddit, symbol, time_filter
+        );
+
+        // Reddit 需要特定 User-Agent
+        match client
+            .get(&url)
+            .header("User-Agent", "TradingAgents-Skill/1.0")
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    continue;
+                }
+                if let Ok(data) = resp.json::<Value>().await {
+                    if let Some(children) = data
+                        .get("data")
+                        .and_then(|d| d.get("children"))
+                        .and_then(|c| c.as_array())
+                    {
+                        for child in children {
+                            if let Some(post_data) = child.get("data") {
+                                all_posts.push(RedditPost {
+                                    title: post_data
+                                        .get("title")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    score: post_data
+                                        .get("score")
+                                        .and_then(|v| v.as_f64())
+                                        .unwrap_or(0.0) as i64,
+                                    num_comments: post_data
+                                        .get("num_comments")
+                                        .and_then(|v| v.as_f64())
+                                        .unwrap_or(0.0) as i64,
+                                    subreddit: subreddit.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+
+    if all_posts.is_empty() {
+        return "<unavailable>".to_string();
+    }
+
+    // 按互动量（分数 + 评论数）降序排序
+    all_posts.sort_by(|a, b| (b.score + b.num_comments).cmp(&(a.score + a.num_comments)));
+
+    let mut sections = Vec::new();
+    sections.push(format!("# Reddit 情绪 ({})\n", symbol));
+    sections.push(format!(
+        "搜索范围: r/wallstreetbets, r/stocks, r/investing（最近 {} 天）\n",
+        days
+    ));
+    sections.push("## 热门帖子（按互动量排序）\n".to_string());
+
+    for post in all_posts.iter().take(REDDIT_POST_DISPLAY) {
+        let title = if post.title.chars().count() > 100 {
+            let t: String = post.title.chars().take(100).collect();
+            format!("{}...", t)
+        } else {
+            post.title.clone()
+        };
+        sections.push(format!(
+            "- [{}] {} (⬆{} | 💬{})",
+            post.subreddit, title, post.score, post.num_comments
+        ));
+    }
+
+    sections.join("\n")
+}
+
+/// Reddit 帖子数据结构
+struct RedditPost {
+    title: String,
+    score: i64,
+    num_comments: i64,
+    subreddit: String,
+}
+
+// ───────────────────────── A股情绪 ─────────────────────────
+
+/// 获取A股情绪数据（东方财富 API）
+async fn fetch_cn_sentiment(symbol: &str) -> String {
+    let mut sections = Vec::new();
+    sections.push(format!("# A股情绪分析 ({})\n", symbol));
+
+    let client = match build_client() {
+        Ok(c) => c,
+        Err(e) => return format!("错误: 创建 HTTP 客户端失败 - {}", e),
+    };
+
+    let mut has_data = false;
+
+    // ── 千股千评（stock_comment_em 对应接口）──
+    // 东方财富千股千评 API
+    let comment_url = format!(
+        "https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=SECURITY_CODE&sortTypes=1&pageSize=500&pageNumber=1&reportName=RPT_DMSK_TS_STOCKNEW&columns=ALL&token=894050c76af8597a853f5b408b759f5d&filter=(SECURITY_CODE=%22{}%22)",
+        symbol
+    );
+
+    match get_with_retry(&client, &comment_url, Some(2)).await {
+        Ok(resp) => {
+            if let Ok(body) = resp.json::<Value>().await {
+                let data_arr = body
+                    .get("result")
+                    .and_then(|r| r.get("data"))
+                    .and_then(|d| d.as_array());
+
+                if let Some(arr) = data_arr {
+                    if !arr.is_empty() {
+                        has_data = true;
+                        sections.push("## 个股评论\n".to_string());
+                        sections.push(format_cn_comment_table(arr));
+                    } else {
+                        sections.push("## 个股评论\n\n> 无数据\n".to_string());
+                    }
+                } else {
+                    sections.push("## 个股评论\n\n> 获取失败\n".to_string());
+                }
+            } else {
+                sections.push("## 个股评论\n\n> 获取失败\n".to_string());
+            }
+        }
+        Err(_) => {
+            sections.push("## 个股评论\n\n> 获取失败\n".to_string());
+        }
+    }
+
+    // ── 机构参与度 ──
+    let eval_url = format!(
+        "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_TS_STOCKEVALUATE&filter=(SECURITY_CODE=%22{}%22)&columns=ALL&source=WEB&client=WEB&sortColumns=TRADE_DATE&sortTypes=-1",
+        symbol
+    );
+
+    match get_with_retry(&client, &eval_url, Some(2)).await {
+        Ok(resp) => {
+            if let Ok(body) = resp.json::<Value>().await {
+                let data_arr = body
+                    .get("result")
+                    .and_then(|r| r.get("data"))
+                    .and_then(|d| d.as_array());
+
+                if let Some(arr) = data_arr {
+                    if !arr.is_empty() {
+                        has_data = true;
+                        sections.push("## 机构参与度\n".to_string());
+                        sections.push(format_org_participation_table(arr));
+                    } else {
+                        sections.push("## 机构参与度\n\n> 无数据\n".to_string());
+                    }
+                } else {
+                    sections.push("## 机构参与度\n\n> 获取失败\n".to_string());
+                }
+            } else {
+                sections.push("## 机构参与度\n\n> 获取失败\n".to_string());
+            }
+        }
+        Err(_) => {
+            sections.push("## 机构参与度\n\n> 获取失败\n".to_string());
+        }
+    }
+
+    if !has_data {
+        sections.push("\n> A 股情绪数据源全部不可用\n".to_string());
+    }
+
+    sections.join("\n")
+}
+
+/// 格式化A股千股千评数据表格
+fn format_cn_comment_table(data: &[Value]) -> String {
+    // 展示最近 10 条的关键字段
+    let indicators = [
+        ("交易日期", "TRADE_DATE"),
+        ("收盘价", "CLOSE_PRICE"),
+        ("涨跌幅(%)", "CHANGE_RATE"),
+        ("综合得分", "COMMENT_SCORE"),
+        ("目前排名", "CURRENT_RANK"),
+        ("关注指数", "FOCUS_INDEX"),
+    ];
+
+    let display_count = data.len().min(10);
+    let mut lines = Vec::new();
+
+    // 表头
+    let header: Vec<&str> = indicators.iter().map(|(d, _)| *d).collect();
+    lines.push(format!("| {} |", header.join(" | ")));
+    lines.push(format!("|{}|", "---|".repeat(indicators.len())));
+
+    for row in data.iter().take(display_count) {
+        let mut cells = Vec::new();
+        for (_, field) in &indicators {
+            let val = row.get(field).unwrap_or(&Value::Null);
+            let s = match val {
+                Value::Null => "N/A".to_string(),
+                Value::Number(n) => {
+                    if let Some(f) = n.as_f64() {
+                        format!("{:.2}", f)
+                    } else {
+                        n.to_string()
+                    }
+                }
+                Value::String(s) => s.clone(),
+                _ => val.to_string(),
+            };
+            cells.push(s);
+        }
+        lines.push(format!("| {} |", cells.join(" | ")));
+    }
+
+    lines.join("\n") + "\n"
+}
+
+/// 格式化机构参与度数据表格
+fn format_org_participation_table(data: &[Value]) -> String {
+    let display_count = data.len().min(10);
+    let mut lines = Vec::new();
+
+    lines.push("| 交易日期 | 机构参与度 |".to_string());
+    lines.push("|---|---|".to_string());
+
+    for row in data.iter().take(display_count) {
+        let date = row
+            .get("TRADE_DATE")
+            .and_then(|v| v.as_str())
+            .map(|s| s.get(..10).unwrap_or(s))
+            .unwrap_or("N/A");
+
+        // 机构参与度需乘以100转为百分比
+        let org_pct = row
+            .get("ORG_PARTICIPATE")
+            .and_then(|v| v.as_f64())
+            .map(|v| format!("{:.2}%", v * 100.0))
+            .unwrap_or_else(|| "N/A".to_string());
+
+        lines.push(format!("| {} | {} |", date, org_pct));
+    }
+
+    lines.join("\n") + "\n"
+}
+
+// ───────────────────────── 统一入口 ─────────────────────────
+
+/// 统一市场情绪数据获取入口
+///
+/// 自动检测市场类型：
+/// - A股（6位纯数字）→ 千股千评 + 机构参与度
+/// - 其他 → StockTwits + Reddit
+///
+/// 契约：永不 panic，错误以字符串形式返回
+pub async fn fetch_sentiment(symbol: &str, limit: u32) -> String {
+    let symbol = symbol.trim();
+    if symbol.is_empty() {
+        return "错误: 股票代码不能为空".to_string();
+    }
+
+    let market = detect_market(symbol);
+    match market {
+        Market::CNStock => fetch_cn_sentiment(symbol).await,
+        _ => {
+            // 美股/其他：组合多个数据源
+            let mut sections = Vec::new();
+            sections.push(format!("# {} 综合情绪分析报告\n", symbol));
+
+            // StockTwits 情绪
+            let stocktwits_result = fetch_stocktwits(symbol, limit).await;
+            if stocktwits_result == "<unavailable>" {
+                sections.push("## StockTwits 情绪\n\n> 数据源不可用\n".to_string());
+            } else {
+                sections.push(stocktwits_result);
+            }
+            sections.push("\n---\n".to_string());
+
+            // Reddit 情绪
+            let reddit_result = fetch_reddit_sentiment(symbol, 7).await;
+            if reddit_result == "<unavailable>" {
+                sections.push("## Reddit 情绪\n\n> 数据源不可用\n".to_string());
+            } else {
+                sections.push(reddit_result);
+            }
+
+            sections.join("\n")
+        }
+    }
+}

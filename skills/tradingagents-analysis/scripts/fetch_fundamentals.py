@@ -28,8 +28,17 @@ except ImportError:
 
 
 def _fmt_num(v) -> str:
-    """格式化数值：缺失/N/A 返回 'N/A'，否则四舍五入保留 2 位。"""
-    if v is None or (isinstance(v, float) and pd.isna(v)):
+    """格式化数值：缺失/N/A 返回 'N/A'，否则四舍五入保留 2 位。
+
+    覆盖 None / np.nan / pd.NA / NaT 四种缺失形态：
+    - 旧守卫 `isinstance(v, float) and pd.isna(v)` 只捕获 float NaN，
+      对 pd.NA 落到 round(float(v), 2) 抛 TypeError，被 except 捕获后返回 str(v) = '<NA>'，
+      导致表格里出现 'N/A' 与 '<NA>' 两种缺失标记混排。
+    - 改用 `v is None or pd.isna(v)` 统一所有缺失形态返回 'N/A'。
+      pd.isna 对标量返回 bool；对 array-like 返回数组（本函数仅被 _row_vals 的标量
+      cell 调用，不存在 array-like 输入）。
+    """
+    if v is None or pd.isna(v):
         return "N/A"
     try:
         return str(round(float(v), 2))
@@ -135,15 +144,20 @@ def fetch_us_fundamentals(symbol: str) -> str:
     返回:
         markdown 格式的基本面报告字符串
     """
+    # 防御性规整：去首尾空格（契约：函数不抛异常）
+    symbol = (symbol or "").strip()
     # 初始化报告内容
     sections: list[str] = []
     sections.append(f"# {symbol} 基本面（精简）\n")
 
-    # 创建 Ticker 对象
-    ticker = yf.Ticker(symbol)
-
-    # 获取公司概况信息（紧凑）
+    # 创建 Ticker 对象 + 获取公司概况信息（紧凑）
+    # yf.Ticker 对空串会抛 ValueError，需包在 try/except 内（与 fetch_us_stock_data 一致）
+    # 预声明 ticker=None：若 yf.Ticker(symbol) 抛异常（网络瞬断/rate limit/无效 symbol），
+    # ticker 永不赋值，后续三大报表 try 块引用 ticker.financials 会抛 NameError 被各自 except
+    # 捕获后置 None —— 看似"无数据"，实则掩盖了公司概况的网络失败。预声明 + 短路让失败原因清晰。
+    ticker = None
     try:
+        ticker = yf.Ticker(symbol)
         info = ticker.info
         sections.append("## 公司概况\n")
         # 提取关键字段，缺失时用 N/A 占位
@@ -165,18 +179,24 @@ def fetch_us_fundamentals(symbol: str) -> str:
         sections.append(f"## 公司概况\n\n> 获取失败: {e}\n")
 
     # 取三大报表（不整表倾倒，只用于抽关键行项）
-    try:
-        financials = ticker.financials
-    except Exception:
+    # 若 ticker 创建失败（None），直接短路，避免引用未定义的 ticker 触发 NameError
+    if ticker is None:
         financials = None
-    try:
-        balance = ticker.balance_sheet
-    except Exception:
         balance = None
-    try:
-        cashflow = ticker.cashflow
-    except Exception:
         cashflow = None
+    else:
+        try:
+            financials = ticker.financials
+        except Exception:
+            financials = None
+        try:
+            balance = ticker.balance_sheet
+        except Exception:
+            balance = None
+        try:
+            cashflow = ticker.cashflow
+        except Exception:
+            cashflow = None
 
     # 关键指标表
     try:
@@ -255,6 +275,8 @@ def fetch_cn_fundamentals(symbol: str) -> str:
     if not has_data:
         sections.append("\n> akshare 数据获取失败，尝试 yfinance 降级方案...\n")
         # 根据代码前缀判断交易所后缀
+        # 已知限制（R6-22）：未覆盖北交所（8 开头）和 B 股（9 开头），这两类代码会被
+        # 错误加 .SZ 后缀。请依赖上方 AKShare 优先路径（已覆盖）。
         if symbol.startswith("6"):
             yf_symbol = f"{symbol}.SS"  # 上海证券交易所
         else:
@@ -295,6 +317,13 @@ def fetch_fundamentals(symbol: str) -> str:
     返回:
         markdown 格式的基本面报告字符串
     """
+    # 契约守卫：非字符串 / 空串 / 纯空白返回错误字符串，不抛异常
+    # （fetch_us_fundamentals 的 yf.Ticker 对空串抛 ValueError，需在此拦截）
+    if not isinstance(symbol, str):
+        return f"错误: 无效的股票代码 {symbol!r}"
+    symbol = symbol.strip()
+    if not symbol:
+        return "错误: 股票代码不能为空"
     # 判断是否为A股代码（6位纯数字）
     if symbol.isdigit() and len(symbol) == 6:
         return fetch_cn_fundamentals(symbol)

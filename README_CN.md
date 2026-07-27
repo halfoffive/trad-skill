@@ -126,14 +126,14 @@ rm -rf /tmp/trad-skill
 ### A股特别说明
 
 - 股票代码使用6位纯数字格式（如 600519、000858）
-- 自动识别上海/深圳市场（`.SS` 后缀为上海，`.SZ` 后缀为深圳）
+- 脚本内部根据 6 位代码前缀自动判断交易所（6 开头 → 上海 .SS；0/3 开头 → 深圳 .SZ），用户只需提供 6 位纯数字
 - 数据源优先级：AKShare → yfinance
 - 支持中文新闻和情绪分析
 - 使用中国市场专用分析师提示词（`china_market_analyst.md`、`cn_news_analyst.md`）
 
 ### 港股特别说明
 
-- 使用5位数字 + `.HK` 后缀（如 00700.HK、09988.HK）
+- 使用 4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；脚本 `zfill(5)` 两种都接受）
 - 数据源：AKShare → yfinance
 - 支持港股通标的和港股主板股票
 
@@ -253,7 +253,7 @@ trad-skill/                        # 仓库根目录（元文件 + 安装器）
 | Baostock | A股历史数据 | 免费 |
 | 通达信 TDX | 技术指标 | 免费 |
 
-详见 [references/data-sources.md](references/data-sources.md)。
+详见 [references/data-sources.md](tradingagents-analysis/references/data-sources.md)。
 
 ---
 
@@ -265,16 +265,16 @@ Python 辅助脚本（函数式编程，中文注释），用于为分析师子�
 
 ```bash
 # 在技能的 scripts/ 目录内手动测试（行情：尾部 OHLCV + 预计算指标 + 可选统计，默认精简）：
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 或用绝对路径调用（代理实际调用方式）：
-python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 旧行为：整段原始 CSV（token 开销大，慎用）
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31 --raw
+python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --raw
 
 # 获取行情数据（A股）
-python scripts/fetch_stock_data.py --symbol 600519 --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python scripts/fetch_stock_data.py --symbol 600519 --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 获取新闻（美股，默认 --limit 8，摘要截断）
 python scripts/fetch_news.py --symbol AAPL --days 7 --limit 8

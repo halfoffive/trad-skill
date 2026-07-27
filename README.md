@@ -141,7 +141,7 @@ The agent will orchestrate the full pipeline and produce a structured investment
 | `max_debate_rounds` | 1-3 | 1 | Bull/bear exchanges in the Research Debate |
 | `max_risk_discuss_rounds` | 1-3 | 1 | Risk analyst exchanges in the Risk Debate |
 | `output_language` | English / Chinese | match user | Language for all reports |
-| `market` | auto-detect | ... | Detected from ticker suffix |
+| `market` | auto-detect | — | Detected from ticker suffix |
 
 Market auto-detection: 6-digit pure number (e.g., 600519, 000858) → A-shares, `.HK` means HK stocks, `-USD` means Crypto, everything else defaults to US stocks.
 
@@ -245,7 +245,7 @@ trad-skill/                        # repo root (meta files + installer)
 | AKShare | A-shares/HK | Price, news, sentiment | Free |
 | Baostock | A-shares | Historical data | Free |
 
-See [references/data-sources.md](references/data-sources.md) for the full catalog with fallback strategies.
+See [references/data-sources.md](tradingagents-analysis/references/data-sources.md) for the full catalog with fallback strategies.
 
 ---
 
@@ -257,13 +257,13 @@ Python helper scripts for data fetching, **compaction, and pre-computation**. Fu
 
 ```bash
 # Stock data: OHLCV tail + pre-computed indicators + optional stats (default; compact)
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Or by absolute path (how the agent invokes them):
-python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --tail 30 --stats
+python ~/.claude/skills/tradingagents-analysis/scripts/fetch_stock_data.py --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Legacy full-range raw CSV (token-heavy, avoid)
-python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-01-31 --raw
+python scripts/fetch_stock_data.py --symbol AAPL --start 2024-01-01 --end 2024-06-30 --raw
 
 # Fetch news (default --limit 8 per source, summaries truncated)
 python scripts/fetch_news.py --symbol AAPL --days 7 --limit 8

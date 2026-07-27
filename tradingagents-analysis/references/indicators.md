@@ -89,3 +89,13 @@ A momentum indicator that uses both price and volume to measure buying and selli
 ## Verified Market Snapshot
 
 The `fetch_stock_data.py` script output is the source of truth for any exact OHLCV, price-level, or indicator-value claim. If a web-search fallback conflicts with the script output, flag the discrepancy rather than inventing a reconciled number. Do not claim historical validation, support/resistance bounces, or exact percentage moves unless they are directly supported by the script output with concrete dates and prices.
+
+## Note on MFI (R6-23)
+
+The source repo's `market_analyst.py` indicator list (verbatim in `references/prompts/market_analyst.md`) does **not** include MFI — trad-skill inherits this verbatim. However, `fetch_stock_data.py` **does** pre-compute MFI(14) and include it in the snapshot table. The Market Analyst should treat the script's MFI row as a supplementary indicator (volume-weighted momentum, >80 overbought / <20 oversold), interpreting it alongside RSI/MACD as documented in the `mfi` section above. This verbatim-vs-script mismatch is documented as a known limitation; do not modify `market_analyst.md` (verbatim constraint).
+
+## Note on RSI / Bollinger implementation details (R6-5, R6-7, R6-8)
+
+- **RSI(14)** uses pandas `ewm(adjust=False, alpha=1/14)` as a Wilder smoothing approximation. The standard Wilder RSI seeds with `mean(gain[1:15])` (14-period SMA); the ewm approximation seeds with `gain[0]`. Bias is ~1pp near the 30/70 thresholds — cross-check with MACD/CCI when RSI is near a threshold before declaring overbought/oversold. Continuous-up periods (avg_loss==0) correctly return RSI=100 (not NA).
+- **Bollinger Bands(20, 2)** use `std(ddof=0)` (population standard deviation), matching the StockCharts/TradingView convention. pandas default `ddof=1` (sample std) would make bands ~2.6% wider.
+- **MFI(14)** handles 0/0 and X/0 edge cases explicitly: all-flat → 50 (neutral); continuous net inflow → 100; continuous net outflow → 0.
