@@ -133,7 +133,8 @@ jobs:
       - name: Extract changelog
         id: changelog
         run: |
-          TAG="${{ steps.tag.outputs.value#v }}"
+          TAG="${{ steps.tag.outputs.value }}"
+          TAG="${TAG#v}"
           # Extract section for this version from CHANGELOG.md
           awk "/^## .*${TAG}/{found=1; next} /^## /{found=0} found{print}" CHANGELOG.md > release_notes.md
           # If no section found, use git log
