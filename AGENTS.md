@@ -4,7 +4,7 @@
 
 An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `npx halfoffive/trad-skill`.
 
-The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ + bin/). Rust source lives in `crates/trad-data/` with CI (cargo fmt/clippy/test + 9-platform cross-build) in `.github/workflows/ci.yml`.
+The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ + bin/). Rust source lives in `crates/trad-data/` with CI (cargo fmt/clippy/test + 7-platform cross-build) in `.github/workflows/ci.yml`.
 
 ## Structure
 
@@ -17,7 +17,7 @@ trad-skill/                        # repo root (meta files + installer)
 ├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # this file
 ├── LICENSE                        # Apache 2.0
-├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 9-platform build
+├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 7-platform build
 ├── crates/trad-data/              # Rust binary source (trad-data)
 └── skills/
     └── tradingagents-analysis/    # the installable skill
@@ -60,17 +60,17 @@ Prompts and methodology are distilled from these. When updating prompts, re-extr
 - All code must pass `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test` before committing.
 - Use `anyhow` for error handling. No `unwrap()`/`expect()` in non-test code.
 - All HTTP clients must use `rustls-tls`. Never introduce `native-tls` or `openssl` (breaks cross-compilation).
-- No `cfg(target_os)` platform-specific code unless covering all 9 build targets.
+- No `cfg(target_os)` platform-specific code unless covering all 7 build targets.
 - No C-dependent system crates (e.g. `openssl-sys`, `sqlite3-sys`).
 
 ### Cross-compilation compatibility
-New dependencies must support all 9 CI targets:
+New dependencies must support all 7 CI targets:
 - linux-{gnu,musl} x {x86_64,aarch64}
 - apple-darwin aarch64
-- windows-{msvc,gnu} x {x86_64,aarch64}
+- windows-msvc x {x86_64,aarch64}
 
-### Build targets (9)
-x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-unknown-linux-musl, aarch64-unknown-linux-musl, aarch64-apple-darwin, x86_64-pc-windows-msvc, aarch64-pc-windows-msvc, x86_64-pc-windows-gnu, aarch64-pc-windows-gnu.
+### Build targets (7)
+x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-unknown-linux-musl, aarch64-unknown-linux-musl, aarch64-apple-darwin, x86_64-pc-windows-msvc, aarch64-pc-windows-msvc.
 
 When adding/removing targets, update: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `bin/trad-data-wrapper.js`.
 
