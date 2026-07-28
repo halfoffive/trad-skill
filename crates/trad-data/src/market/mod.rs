@@ -102,12 +102,17 @@ pub fn parse_eastmoney_klines(
 }
 
 /// 统一 OHLCV 数据获取入口，自动检测市场
-pub async fn fetch_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<OhlcvRow>, String> {
+pub async fn fetch_ohlcv(
+    client: &reqwest::Client,
+    symbol: &str,
+    start: &str,
+    end: &str,
+) -> Result<Vec<OhlcvRow>, String> {
     match detect_market(symbol) {
-        Market::US => us::fetch_us_ohlcv(symbol, start, end).await,
-        Market::Crypto => crypto::fetch_crypto_ohlcv(symbol, start, end).await,
-        Market::CNStock => cn::fetch_cn_ohlcv(symbol, start, end).await,
-        Market::HKStock => hk::fetch_hk_ohlcv(symbol, start, end).await,
+        Market::US => us::fetch_us_ohlcv(client, symbol, start, end).await,
+        Market::Crypto => crypto::fetch_crypto_ohlcv(client, symbol, start, end).await,
+        Market::CNStock => cn::fetch_cn_ohlcv(client, symbol, start, end).await,
+        Market::HKStock => hk::fetch_hk_ohlcv(client, symbol, start, end).await,
     }
 }
 

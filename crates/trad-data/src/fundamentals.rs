@@ -2,9 +2,10 @@
 ///
 /// 支持美股（Yahoo Finance v10 API）和A股（东方财富 API）的基本面数据获取。
 /// 对齐 Python fetch_fundamentals.py 的输出格式。
+use reqwest::Client;
 use serde_json::Value;
 
-use crate::http::{build_client, get_with_retry};
+use crate::http::get_with_retry;
 use crate::market::{detect_market, Market};
 
 // ───────────────────────── 工具函数 ─────────────────────────
@@ -73,7 +74,7 @@ fn extract_row_values(statements: &[Value], row_label: &str) -> Vec<Option<f64>>
 // ───────────────────────── 美股基本面 ─────────────────────────
 
 /// 获取美股基本面数据（Yahoo Finance v10 API）
-async fn fetch_us_fundamentals(symbol: &str) -> String {
+async fn fetch_us_fundamentals(client: &Client, symbol: &str) -> String {
     let mut sections = Vec::new();
     sections.push(format!("# {} 基本面（精简）\n", symbol));
 
@@ -84,12 +85,7 @@ async fn fetch_us_fundamentals(symbol: &str) -> String {
         symbol, modules
     );
 
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(e) => return format!("错误: 创建 HTTP 客户端失败 - {}", e),
-    };
-
-    let resp = match get_with_retry(&client, &url, Some(2)).await {
+    let resp = match get_with_retry(client, &url, Some(2)).await {
         Ok(r) => r,
         Err(e) => return format!("错误: 获取 {} 基本面数据失败 - {}", symbol, e),
     };
@@ -311,14 +307,9 @@ fn build_us_metric_table(
 // ───────────────────────── A股基本面 ─────────────────────────
 
 /// 获取A股基本面数据（东方财富 API）
-async fn fetch_cn_fundamentals(symbol: &str) -> String {
+async fn fetch_cn_fundamentals(client: &Client, symbol: &str) -> String {
     let mut sections = Vec::new();
     sections.push(format!("# {} A股基本面（精简）\n", symbol));
-
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(e) => return format!("错误: 创建 HTTP 客户端失败 - {}", e),
-    };
 
     // ── 个股基本信息（东方财富 push2 API）──
     let market_id = if symbol.starts_with('6') { "1" } else { "0" };
@@ -329,7 +320,7 @@ async fn fetch_cn_fundamentals(symbol: &str) -> String {
     );
 
     let mut has_info = false;
-    if let Ok(resp) = get_with_retry(&client, &info_url, Some(2)).await {
+    if let Ok(resp) = get_with_retry(client, &info_url, Some(2)).await {
         if let Ok(body) = resp.json::<Value>().await {
             if let Some(data) = body.get("data") {
                 sections.push("## 个股基本信息\n".to_string());
@@ -364,7 +355,7 @@ async fn fetch_cn_fundamentals(symbol: &str) -> String {
         symbol
     );
 
-    match get_with_retry(&client, &fin_url, Some(2)).await {
+    match get_with_retry(client, &fin_url, Some(2)).await {
         Ok(resp) => {
             if let Ok(body) = resp.json::<Value>().await {
                 let data_arr = body
@@ -450,7 +441,7 @@ fn build_cn_financial_table(data: &[Value]) -> String {
 /// - 其他 → 美股
 ///
 /// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_fundamentals(symbol: &str) -> String {
+pub async fn fetch_fundamentals(client: &Client, symbol: &str) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();
@@ -458,7 +449,7 @@ pub async fn fetch_fundamentals(symbol: &str) -> String {
 
     let market = detect_market(symbol);
     match market {
-        Market::CNStock => fetch_cn_fundamentals(symbol).await,
-        _ => fetch_us_fundamentals(symbol).await,
+        Market::CNStock => fetch_cn_fundamentals(client, symbol).await,
+        _ => fetch_us_fundamentals(client, symbol).await,
     }
 }

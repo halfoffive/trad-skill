@@ -6,9 +6,10 @@
 /// - 东方财富千股千评 / 机构参与度（A股）
 ///
 /// 对齐 Python fetch_sentiment.py 的输出格式。
+use reqwest::Client;
 use serde_json::Value;
 
-use crate::http::{build_client, get_with_retry};
+use crate::http::get_with_retry;
 use crate::market::{detect_market, Market};
 
 /// 最近消息展示条数
@@ -19,18 +20,13 @@ const REDDIT_POST_DISPLAY: usize = 8;
 // ───────────────────────── StockTwits ─────────────────────────
 
 /// 获取 StockTwits 情绪数据
-async fn fetch_stocktwits(symbol: &str, limit: u32) -> String {
+async fn fetch_stocktwits(client: &Client, symbol: &str, limit: u32) -> String {
     let url = format!(
         "https://api.stocktwits.com/api/2/streams/symbol/{}.json",
         symbol
     );
 
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(_) => return "<unavailable>".to_string(),
-    };
-
-    let resp = match get_with_retry(&client, &url, Some(1)).await {
+    let resp = match get_with_retry(client, &url, Some(1)).await {
         Ok(r) => r,
         Err(_) => return "<unavailable>".to_string(),
     };
@@ -114,70 +110,79 @@ async fn fetch_stocktwits(symbol: &str, limit: u32) -> String {
 
 // ───────────────────────── Reddit ─────────────────────────
 
-/// 获取 Reddit 情绪数据
-async fn fetch_reddit_sentiment(symbol: &str, days: u32) -> String {
-    let days = days.max(1);
-    let time_filter = if days <= 7 { "week" } else { "month" };
-    let subreddits = ["wallstreetbets", "stocks", "investing"];
+/// 获取单个 subreddit 的搜索结果
+async fn fetch_subreddit(
+    client: &Client,
+    subreddit: &str,
+    symbol: &str,
+    time_filter: &str,
+) -> Vec<RedditPost> {
+    let url = format!(
+        "https://www.reddit.com/r/{}/search.json?q={}&sort=new&t={}&limit=10",
+        subreddit, symbol, time_filter
+    );
 
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(_) => return "<unavailable>".to_string(),
+    let resp = match client
+        .get(&url)
+        .header("User-Agent", "TradingAgents-Skill/1.0")
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => r,
+        _ => return Vec::new(),
     };
 
-    let mut all_posts: Vec<RedditPost> = Vec::new();
+    let data: Value = match resp.json().await {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
 
-    for subreddit in &subreddits {
-        let url = format!(
-            "https://www.reddit.com/r/{}/search.json?q={}&sort=new&t={}&limit=10",
-            subreddit, symbol, time_filter
-        );
-
-        // Reddit 需要特定 User-Agent
-        match client
-            .get(&url)
-            .header("User-Agent", "TradingAgents-Skill/1.0")
-            .send()
-            .await
-        {
-            Ok(resp) => {
-                if !resp.status().is_success() {
-                    continue;
-                }
-                if let Ok(data) = resp.json::<Value>().await {
-                    if let Some(children) = data
-                        .get("data")
-                        .and_then(|d| d.get("children"))
-                        .and_then(|c| c.as_array())
-                    {
-                        for child in children {
-                            if let Some(post_data) = child.get("data") {
-                                all_posts.push(RedditPost {
-                                    title: post_data
-                                        .get("title")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    score: post_data
-                                        .get("score")
-                                        .and_then(|v| v.as_f64())
-                                        .unwrap_or(0.0)
-                                        as i64,
-                                    num_comments: post_data
-                                        .get("num_comments")
-                                        .and_then(|v| v.as_f64())
-                                        .unwrap_or(0.0)
-                                        as i64,
-                                    subreddit: subreddit.to_string(),
-                                });
-                            }
-                        }
-                    }
-                }
+    let mut posts = Vec::new();
+    if let Some(children) = data
+        .get("data")
+        .and_then(|d| d.get("children"))
+        .and_then(|c| c.as_array())
+    {
+        for child in children {
+            if let Some(post_data) = child.get("data") {
+                posts.push(RedditPost {
+                    title: post_data
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    score: post_data
+                        .get("score")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0) as i64,
+                    num_comments: post_data
+                        .get("num_comments")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0) as i64,
+                    subreddit: subreddit.to_string(),
+                });
             }
-            Err(_) => continue,
         }
     }
+    posts
+}
+
+/// 获取 Reddit 情绪数据
+async fn fetch_reddit_sentiment(client: &Client, symbol: &str, days: u32) -> String {
+    let days = days.max(1);
+    let time_filter = if days <= 7 { "week" } else { "month" };
+
+    // 并行获取 3 个 subreddit
+    let (wsb, stocks, investing) = tokio::join!(
+        fetch_subreddit(client, "wallstreetbets", symbol, time_filter),
+        fetch_subreddit(client, "stocks", symbol, time_filter),
+        fetch_subreddit(client, "investing", symbol, time_filter)
+    );
+
+    let mut all_posts: Vec<RedditPost> = Vec::new();
+    all_posts.extend(wsb);
+    all_posts.extend(stocks);
+    all_posts.extend(investing);
 
     if all_posts.is_empty() {
         return "<unavailable>".to_string();
@@ -221,14 +226,9 @@ struct RedditPost {
 // ───────────────────────── A股情绪 ─────────────────────────
 
 /// 获取A股情绪数据（东方财富 API）
-async fn fetch_cn_sentiment(symbol: &str) -> String {
+async fn fetch_cn_sentiment(client: &Client, symbol: &str) -> String {
     let mut sections = Vec::new();
     sections.push(format!("# A股情绪分析 ({})\n", symbol));
-
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(e) => return format!("错误: 创建 HTTP 客户端失败 - {}", e),
-    };
 
     let mut has_data = false;
 
@@ -239,7 +239,7 @@ async fn fetch_cn_sentiment(symbol: &str) -> String {
         symbol
     );
 
-    match get_with_retry(&client, &comment_url, Some(2)).await {
+    match get_with_retry(client, &comment_url, Some(2)).await {
         Ok(resp) => {
             if let Ok(body) = resp.json::<Value>().await {
                 let data_arr = body
@@ -273,7 +273,7 @@ async fn fetch_cn_sentiment(symbol: &str) -> String {
         symbol
     );
 
-    match get_with_retry(&client, &eval_url, Some(2)).await {
+    match get_with_retry(client, &eval_url, Some(2)).await {
         Ok(resp) => {
             if let Ok(body) = resp.json::<Value>().await {
                 let data_arr = body
@@ -386,10 +386,10 @@ fn format_org_participation_table(data: &[Value]) -> String {
 ///
 /// 自动检测市场类型：
 /// - A股（6位纯数字）→ 千股千评 + 机构参与度
-/// - 其他 → StockTwits + Reddit
+/// - 其他 → StockTwits + Reddit（并行获取）
 ///
 /// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_sentiment(symbol: &str, limit: u32) -> String {
+pub async fn fetch_sentiment(client: &Client, symbol: &str, limit: u32) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();
@@ -397,14 +397,17 @@ pub async fn fetch_sentiment(symbol: &str, limit: u32) -> String {
 
     let market = detect_market(symbol);
     match market {
-        Market::CNStock => fetch_cn_sentiment(symbol).await,
+        Market::CNStock => fetch_cn_sentiment(client, symbol).await,
         _ => {
-            // 美股/其他：组合多个数据源
+            // 美股/其他：并行获取 StockTwits + Reddit
+            let (stocktwits_result, reddit_result) = tokio::join!(
+                fetch_stocktwits(client, symbol, limit),
+                fetch_reddit_sentiment(client, symbol, 7)
+            );
+
             let mut sections = Vec::new();
             sections.push(format!("# {} 综合情绪分析报告\n", symbol));
 
-            // StockTwits 情绪
-            let stocktwits_result = fetch_stocktwits(symbol, limit).await;
             if stocktwits_result == "<unavailable>" {
                 sections.push("## StockTwits 情绪\n\n> 数据源不可用\n".to_string());
             } else {
@@ -412,8 +415,6 @@ pub async fn fetch_sentiment(symbol: &str, limit: u32) -> String {
             }
             sections.push("\n---\n".to_string());
 
-            // Reddit 情绪
-            let reddit_result = fetch_reddit_sentiment(symbol, 7).await;
             if reddit_result == "<unavailable>" {
                 sections.push("## Reddit 情绪\n\n> 数据源不可用\n".to_string());
             } else {
