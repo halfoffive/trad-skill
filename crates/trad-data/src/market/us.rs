@@ -7,7 +7,9 @@ use serde_json::Value;
 fn date_to_unix(date_str: &str) -> Result<i64, String> {
     let d = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
         .map_err(|e| format!("日期解析失败 '{}': {}", date_str, e))?;
-    let dt = d.and_hms_opt(0, 0, 0).unwrap();
+    let dt = d
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| format!("无效时间: '{}'", date_str))?;
     Ok(dt.and_utc().timestamp())
 }
 

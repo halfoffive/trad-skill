@@ -1,5 +1,5 @@
 use crate::http::{build_client, get_with_retry};
-use crate::market::OhlcvRow;
+use crate::market::{parse_eastmoney_klines, OhlcvRow};
 
 /// 获取A股 OHLCV 数据（东方财富 API）
 ///
@@ -34,16 +34,8 @@ pub async fn fetch_cn_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
         .await
         .map_err(|e| format!("读取响应失败: {}", e))?;
 
-    parse_eastmoney_response(symbol, &body)
-}
-
-/// 解析东方财富 API 的 kline 响应
-///
-/// klines 是逗号分隔字符串数组，字段顺序:
-/// 日期,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率[,股票代码]
-fn parse_eastmoney_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, String> {
     let root: serde_json::Value =
-        serde_json::from_str(body).map_err(|e| format!("JSON 解析失败: {}", e))?;
+        serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))?;
 
     let data = root
         .get("data")
@@ -58,34 +50,5 @@ fn parse_eastmoney_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, S
             )
         })?;
 
-    let mut rows = Vec::new();
-    for line in klines {
-        let s = match line.as_str() {
-            Some(s) => s,
-            None => continue,
-        };
-        let fields: Vec<&str> = s.split(',').collect();
-        // 至少需要: 日期(0),开盘(1),收盘(2),最高(3),最低(4),成交量(5)
-        if fields.len() < 6 {
-            continue;
-        }
-
-        let date = fields[0].to_string();
-        let open: f64 = fields[1].parse().unwrap_or(0.0);
-        let close: f64 = fields[2].parse().unwrap_or(0.0); // 注意：收盘在开盘后面
-        let high: f64 = fields[3].parse().unwrap_or(0.0);
-        let low: f64 = fields[4].parse().unwrap_or(0.0);
-        let volume: f64 = fields[5].parse().unwrap_or(0.0);
-
-        rows.push(OhlcvRow {
-            date,
-            open,
-            high,
-            low,
-            close,
-            volume,
-        });
-    }
-
-    Ok(rows)
+    Ok(parse_eastmoney_klines(klines, None))
 }

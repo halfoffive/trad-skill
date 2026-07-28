@@ -1,21 +1,25 @@
 use crate::indicators;
 use crate::market::OhlcvRow;
 
+/// 报告生成选项
+pub struct ReportOptions {
+    pub tail: u32,
+    pub indicators: bool,
+    pub stats: bool,
+    pub raw: bool,
+}
+
 /// 构建精简报告（对齐 Python build_compact_report）
 ///
 /// 默认模式：指标快照表 + 尾部 OHLCV（默认30行）
 /// `stats` 模式：附加区间统计
 /// `raw` 模式：纯 CSV 输出
-#[allow(clippy::too_many_arguments)]
 pub fn build_compact_report(
     symbol: &str,
     start: &str,
     end: &str,
     data: &[OhlcvRow],
-    tail: u32,
-    use_indicators: bool,
-    use_stats: bool,
-    raw: bool,
+    opts: &ReportOptions,
 ) -> String {
     if data.is_empty() {
         return format!(
@@ -25,7 +29,7 @@ pub fn build_compact_report(
     }
 
     // --raw 模式：纯 CSV 输出
-    if raw {
+    if opts.raw {
         return ohlcv_to_csv(data);
     }
 
@@ -33,17 +37,17 @@ pub fn build_compact_report(
     sections.push(format!("# {} 行情（{} 至 {}）\n", symbol, start, end));
 
     // 区间统计
-    if use_stats {
+    if opts.stats {
         sections.push(indicators::compute_stats(data));
     }
 
     // 技术指标快照
-    if use_indicators {
+    if opts.indicators {
         sections.push(indicators::compute_indicators(data));
     }
 
     // 尾部 OHLCV
-    let tail_n = tail as usize;
+    let tail_n = opts.tail as usize;
     let tail_data = if data.len() > tail_n {
         &data[data.len() - tail_n..]
     } else {
