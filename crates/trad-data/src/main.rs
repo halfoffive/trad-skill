@@ -65,6 +65,7 @@ enum Commands {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let client = http::build_client()?;
 
     match cli.command {
         Commands::Stock {
@@ -92,7 +93,7 @@ async fn main() -> anyhow::Result<()> {
 
             if raw {
                 // --raw 模式：纯 CSV 输出
-                match market::fetch_ohlcv(&symbol, &start_date, &end_date).await {
+                match market::fetch_ohlcv(&client, &symbol, &start_date, &end_date).await {
                     Ok(data) => {
                         if data.is_empty() {
                             eprintln!("错误: 未获取到 {} 的数据", symbol);
@@ -107,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             } else {
                 // 默认模式：精简报告（指标 + 尾部 OHLCV）
-                match market::fetch_ohlcv(&symbol, &start_date, &end_date).await {
+                match market::fetch_ohlcv(&client, &symbol, &start_date, &end_date).await {
                     Ok(data) => {
                         let opts = format::ReportOptions {
                             tail,
@@ -132,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Fundamentals { symbol } => {
-            let result = fundamentals::fetch_fundamentals(&symbol).await;
+            let result = fundamentals::fetch_fundamentals(&client, &symbol).await;
             if result.starts_with("错误") {
                 eprintln!("{}", result);
                 std::process::exit(1);
@@ -144,7 +145,7 @@ async fn main() -> anyhow::Result<()> {
             days,
             limit,
         } => {
-            let result = news::fetch_news(&symbol, days, limit).await;
+            let result = news::fetch_news(&client, &symbol, days, limit).await;
             if result.starts_with("错误") {
                 eprintln!("{}", result);
                 std::process::exit(1);
@@ -152,7 +153,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", result);
         }
         Commands::Sentiment { symbol, limit } => {
-            let result = sentiment::fetch_sentiment(&symbol, limit).await;
+            let result = sentiment::fetch_sentiment(&client, &symbol, limit).await;
             if result.starts_with("错误") {
                 eprintln!("{}", result);
                 std::process::exit(1);

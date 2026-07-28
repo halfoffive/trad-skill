@@ -8,9 +8,10 @@
 /// 对齐 Python fetch_news.py 的输出格式。
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
+use reqwest::Client;
 use serde_json::Value;
 
-use crate::http::{build_client, get_with_retry};
+use crate::http::get_with_retry;
 use crate::market::{detect_market, Market};
 
 /// 摘要最大字符数
@@ -65,19 +66,14 @@ fn strip_html(html: &str) -> String {
 // ───────────────────────── Yahoo Finance 新闻 ─────────────────────────
 
 /// 通过 Yahoo Finance v10 API 获取个股新闻
-async fn fetch_yfinance_news(symbol: &str, days: u32, limit: u32) -> String {
+async fn fetch_yfinance_news(client: &Client, symbol: &str, days: u32, limit: u32) -> String {
     let days = days.max(1);
     let url = format!(
         "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=news",
         symbol
     );
 
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(e) => return format!("错误: 获取 {} 新闻失败 - {}", symbol, e),
-    };
-
-    let resp = match get_with_retry(&client, &url, Some(2)).await {
+    let resp = match get_with_retry(client, &url, Some(2)).await {
         Ok(r) => r,
         Err(e) => return format!("错误: 获取 {} 新闻失败 - {}", symbol, e),
     };
@@ -192,7 +188,13 @@ fn parse_news_time(item: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
 // ───────────────────────── Google News RSS ─────────────────────────
 
 /// 通过 Google News RSS 获取新闻
-async fn fetch_google_news(query: &str, days: u32, limit: u32, lang: &str) -> String {
+async fn fetch_google_news(
+    client: &Client,
+    query: &str,
+    days: u32,
+    limit: u32,
+    lang: &str,
+) -> String {
     let days = days.max(1);
     let encoded_query = urlencoding_encode(query);
     let (hl, gl, ceid) = match lang {
@@ -204,12 +206,7 @@ async fn fetch_google_news(query: &str, days: u32, limit: u32, lang: &str) -> St
         encoded_query, days, hl, gl, ceid
     );
 
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(e) => return format!("错误: Google News 请求失败 - {}", e),
-    };
-
-    let resp = match get_with_retry(&client, &url, Some(2)).await {
+    let resp = match get_with_retry(client, &url, Some(2)).await {
         Ok(r) => r,
         Err(e) => return format!("错误: Google News 请求失败 - {}", e),
     };
@@ -313,12 +310,7 @@ fn parse_google_news_rss(xml: &str, query: &str, days: u32, limit: u32) -> Strin
 // ───────────────────────── A股新闻（东方财富）─────────────────────────
 
 /// 通过东方财富搜索 API 获取A股新闻
-async fn fetch_cn_news(symbol: &str, days: u32, limit: u32) -> String {
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(e) => return format!("错误: 创建 HTTP 客户端失败 - {}", e),
-    };
-
+async fn fetch_cn_news(client: &Client, symbol: &str, days: u32, limit: u32) -> String {
     // 东方财富搜索 API（JSONP 格式）
     let param = serde_json::json!({
         "uid": "",
@@ -344,13 +336,20 @@ async fn fetch_cn_news(symbol: &str, days: u32, limit: u32) -> String {
         urlencoding_encode(&param.to_string())
     );
 
-    match get_with_retry(&client, &url, Some(2)).await {
+    match get_with_retry(client, &url, Some(2)).await {
         Ok(resp) => {
             let text = match resp.text().await {
                 Ok(t) => t,
                 Err(_e) => {
                     // 降级到 Google News 中文
-                    return fetch_google_news(&format!("{} A股", symbol), days, limit, "zh").await;
+                    return fetch_google_news(
+                        client,
+                        &format!("{} A股", symbol),
+                        days,
+                        limit,
+                        "zh",
+                    )
+                    .await;
                 }
             };
 
@@ -359,7 +358,14 @@ async fn fetch_cn_news(symbol: &str, days: u32, limit: u32) -> String {
             let body: Value = match serde_json::from_str(&json_str) {
                 Ok(v) => v,
                 Err(_) => {
-                    return fetch_google_news(&format!("{} A股", symbol), days, limit, "zh").await;
+                    return fetch_google_news(
+                        client,
+                        &format!("{} A股", symbol),
+                        days,
+                        limit,
+                        "zh",
+                    )
+                    .await;
                 }
             };
 
@@ -401,11 +407,11 @@ async fn fetch_cn_news(symbol: &str, days: u32, limit: u32) -> String {
             }
 
             // 东方财富无结果，降级到 Google News 中文
-            fetch_google_news(&format!("{} A股", symbol), days, limit, "zh").await
+            fetch_google_news(client, &format!("{} A股", symbol), days, limit, "zh").await
         }
         Err(_) => {
             // 降级到 Google News 中文
-            fetch_google_news(&format!("{} A股", symbol), days, limit, "zh").await
+            fetch_google_news(client, &format!("{} A股", symbol), days, limit, "zh").await
         }
     }
 }
@@ -428,10 +434,10 @@ fn strip_jsonp(text: &str) -> String {
 ///
 /// 自动检测市场类型：
 /// - A股（6位纯数字）→ 东方财富新闻，失败降级 Google News 中文
-/// - 其他 → Yahoo Finance 新闻 + Google News，合并输出
+/// - 其他 → Yahoo Finance 新闻 + Google News，并行获取后合并输出
 ///
 /// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_news(symbol: &str, days: u32, limit: u32) -> String {
+pub async fn fetch_news(client: &Client, symbol: &str, days: u32, limit: u32) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();
@@ -439,17 +445,18 @@ pub async fn fetch_news(symbol: &str, days: u32, limit: u32) -> String {
 
     let market = detect_market(symbol);
     match market {
-        Market::CNStock => fetch_cn_news(symbol, days, limit).await,
+        Market::CNStock => fetch_cn_news(client, symbol, days, limit).await,
         _ => {
-            // 非A股：组合 Yahoo Finance + Google News
-            let mut sections = Vec::new();
+            // 非A股：并行获取 Yahoo Finance + Google News
+            let (yf_news, google_news) = tokio::join!(
+                fetch_yfinance_news(client, symbol, days, limit),
+                fetch_google_news(client, symbol, days, limit, "en")
+            );
 
-            let yf_news = fetch_yfinance_news(symbol, days, limit).await;
+            let mut sections = Vec::new();
             if !yf_news.starts_with("错误") {
                 sections.push(yf_news.clone());
             }
-
-            let google_news = fetch_google_news(symbol, days, limit, "en").await;
             if !google_news.starts_with("错误") {
                 sections.push(google_news);
             }

@@ -1,6 +1,7 @@
-use crate::http::{build_client, get_with_retry};
+use crate::http::get_with_retry;
 use crate::market::OhlcvRow;
 use chrono::NaiveDate;
+use reqwest::Client;
 use serde_json::Value;
 
 /// 将 YYYY-MM-DD 转为 Unix 时间戳（UTC 零点）
@@ -112,7 +113,12 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
 /// 如果直接调用失败，尝试先获取 cookie 再重试。
 /// 日期参数从 YYYY-MM-DD 转为 Unix 时间戳。
 /// 返回错误字符串而非 panic（对齐 Python "never raises" 契约）。
-pub async fn fetch_us_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<OhlcvRow>, String> {
+pub async fn fetch_us_ohlcv(
+    client: &Client,
+    symbol: &str,
+    start: &str,
+    end: &str,
+) -> Result<Vec<OhlcvRow>, String> {
     let period1 = date_to_unix(start)?;
     let period2 = date_to_unix(end)?;
 
@@ -121,10 +127,8 @@ pub async fn fetch_us_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
         symbol, period1, period2
     );
 
-    let client = build_client().map_err(|e| format!("构建 HTTP 客户端失败: {}", e))?;
-
     // 第一次尝试：直接请求
-    match get_with_retry(&client, &url, Some(2)).await {
+    match get_with_retry(client, &url, Some(2)).await {
         Ok(resp) => {
             let body = resp
                 .text()
@@ -137,7 +141,7 @@ pub async fn fetch_us_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
             let cookie_url = "https://fc.yahoo.com";
             let _ = client.get(cookie_url).send().await;
 
-            let resp = get_with_retry(&client, &url, Some(2))
+            let resp = get_with_retry(client, &url, Some(2))
                 .await
                 .map_err(|e| format!("Yahoo Finance 请求失败({}): {}", symbol, e))?;
             let body = resp

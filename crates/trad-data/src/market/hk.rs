@@ -1,5 +1,6 @@
-use crate::http::{build_client, get_with_retry};
+use crate::http::get_with_retry;
 use crate::market::{parse_eastmoney_klines, OhlcvRow};
+use reqwest::Client;
 
 /// 获取港股 OHLCV 数据（东方财富 API）
 ///
@@ -7,7 +8,12 @@ use crate::market::{parse_eastmoney_klines, OhlcvRow};
 /// - secid 固定前缀 116
 /// - API 返回全量数据，客户端按日期过滤
 /// - klines 字段顺序同A股但无最后的股票代码列
-pub async fn fetch_hk_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<OhlcvRow>, String> {
+pub async fn fetch_hk_ohlcv(
+    client: &Client,
+    symbol: &str,
+    start: &str,
+    end: &str,
+) -> Result<Vec<OhlcvRow>, String> {
     // 日期转为 YYYYMMDD 格式
     let beg = start.replace('-', "");
     let end_fmt = end.replace('-', "");
@@ -22,8 +28,7 @@ pub async fn fetch_hk_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
         symbol
     );
 
-    let client = build_client().map_err(|e| format!("构建 HTTP 客户端失败: {}", e))?;
-    let resp = get_with_retry(&client, &url, Some(3))
+    let resp = get_with_retry(client, &url, Some(3))
         .await
         .map_err(|e| format!("东方财富港股 API 请求失败({}): {}", symbol, e))?;
     let body = resp
