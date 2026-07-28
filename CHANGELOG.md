@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-07-28
+
+### Changed
+
+- **Shared HTTP client**: `reqwest::Client` created once in `main()` and passed to all subcommands, enabling connection pooling across requests.
+- **Parallel data fetching**: Yahoo Finance + Google News fetches parallelized via `tokio::join!`; StockTwits + Reddit parallelized; 3 subreddit fetches parallelized.
+- **Release profile optimization**: `strip = true`, `lto = true`, `codegen-units = 1` — release binary reduced from 4.8 MB to 3.9 MB (-18%).
+- **ReportOptions struct**: replaced 8-parameter `build_compact_report` with a config struct, removed `#[allow(clippy::too_many_arguments)]`.
+- **Shared kline parser**: extracted `parse_eastmoney_klines()` to `market/mod.rs`, eliminating duplicate parsing logic between `cn.rs` and `hk.rs`.
+- `package.json` `version`: `1.4.0` → `1.5.0`.
+- `crates/trad-data/Cargo.toml` `version`: `1.4.0` → `1.5.0`.
+
+### Fixed
+
+- **Removed unused `csv` dependency**: declared in `Cargo.toml` but never imported.
+- **`us.rs` `.unwrap()` violation**: `date_to_unix` used `.unwrap()` on `and_hms_opt`; replaced with `.ok_or_else()` (AGENTS.md compliance).
+- **`rolling_std` usize underflow**: `i - period + 1` panicked in debug mode when `i == period - 1`; changed to `i + 1 - period`.
+- **HK stock date filter format mismatch**: `parse_eastmoney_klines` compared `YYYY-MM-DD` dates against `YYYYMMDD` filter, silently filtering out all rows; now normalizes format before comparison.
+
+### Added
+
+- **24 new unit tests** (28 total, was 4): coverage for `indicators` (SMA/EMA/RSI/Bollinger/ATR edge cases), `format` (empty data, raw mode, CSV, tail truncation), `parse_eastmoney_klines` (basic, date filter, short rows, empty), `news` utilities (`strip_html`, `strip_jsonp`, `urlencoding_encode`, `truncate`).
+- **Release workflow quality gate**: `release.yml` now runs `cargo fmt --check` + `clippy -D warnings` + `cargo test` before building release binaries.
+- **SKILL.md §8**: documented 5-digit pure number → HK stock auto-detection rule.
+
 ## [1.4.0] - 2026-07-27
 
 ### Added
