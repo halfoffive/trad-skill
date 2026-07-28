@@ -1,5 +1,5 @@
 use crate::http::{build_client, get_with_retry};
-use crate::market::OhlcvRow;
+use crate::market::{parse_eastmoney_klines, OhlcvRow};
 
 /// 获取港股 OHLCV 数据（东方财富 API）
 ///
@@ -31,7 +31,6 @@ pub async fn fetch_hk_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
         .await
         .map_err(|e| format!("读取响应失败: {}", e))?;
 
-    // 解析响应
     let root: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))?;
 
@@ -43,41 +42,6 @@ pub async fn fetch_hk_ohlcv(symbol: &str, start: &str, end: &str) -> Result<Vec<
         .and_then(|k| k.as_array())
         .ok_or_else(|| format!("东方财富港股返回无 klines 数据: {}", symbol))?;
 
-    let mut rows = Vec::new();
-    for line in klines {
-        let s = match line.as_str() {
-            Some(s) => s,
-            None => continue,
-        };
-        let fields: Vec<&str> = s.split(',').collect();
-        // 港股 klines 字段顺序: 日期,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率
-        // 无最后的股票代码列
-        if fields.len() < 6 {
-            continue;
-        }
-
-        let date = fields[0].to_string();
-
-        // 按日期过滤（API 返回全量）
-        if date < beg || date > end_fmt {
-            continue;
-        }
-
-        let open: f64 = fields[1].parse().unwrap_or(0.0);
-        let close: f64 = fields[2].parse().unwrap_or(0.0); // 收盘在开盘后面
-        let high: f64 = fields[3].parse().unwrap_or(0.0);
-        let low: f64 = fields[4].parse().unwrap_or(0.0);
-        let volume: f64 = fields[5].parse().unwrap_or(0.0);
-
-        rows.push(OhlcvRow {
-            date,
-            open,
-            high,
-            low,
-            close,
-            volume,
-        });
-    }
-
-    Ok(rows)
+    // 港股 API 返回全量数据，需按日期过滤
+    Ok(parse_eastmoney_klines(klines, Some((&beg, &end_fmt))))
 }

@@ -109,15 +109,18 @@ async fn main() -> anyhow::Result<()> {
                 // 默认模式：精简报告（指标 + 尾部 OHLCV）
                 match market::fetch_ohlcv(&symbol, &start_date, &end_date).await {
                     Ok(data) => {
+                        let opts = format::ReportOptions {
+                            tail,
+                            indicators: use_indicators,
+                            stats: use_stats,
+                            raw: false,
+                        };
                         let report = format::build_compact_report(
                             &symbol,
                             &start_date,
                             &end_date,
                             &data,
-                            tail,
-                            use_indicators,
-                            use_stats,
-                            false,
+                            &opts,
                         );
                         print!("{}", report);
                     }
