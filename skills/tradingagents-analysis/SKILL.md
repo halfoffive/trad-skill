@@ -286,6 +286,7 @@ Close with a summary table:
 **Market auto-detection rules**:
 
 - 6 位纯数字（如 600519、000858） → A股 (China A-shares)
+- 5 位纯数字（如 09988） → 港股 (HK stocks, 无 .HK 后缀时)
 - Suffix `.HK` → 港股 (HK stocks)
 - Suffix `-USD` → Crypto
 - Everything else → US stocks

@@ -18,9 +18,38 @@ permissions:
   id-token: write
 
 jobs:
+  check:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/trad-data
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        working-directory: crates/trad-data
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: crates/trad-data
+
+      - name: Run tests
+        run: cargo test
+        working-directory: crates/trad-data
+
   build:
     name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    needs: check
     strategy:
       fail-fast: false
       matrix:
