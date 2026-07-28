@@ -75,7 +75,7 @@ fn rolling_std(data: &[f64], period: usize) -> Vec<f64> {
         return result;
     }
     for i in (period - 1)..data.len() {
-        let window = &data[i - period + 1..=i];
+        let window = &data[i + 1 - period..=i];
         let mean = window.iter().sum::<f64>() / period as f64;
         let variance = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / period as f64;
         result[i] = variance.sqrt();
@@ -433,4 +433,123 @@ pub fn compute_stats(data: &[OhlcvRow]) -> String {
     ];
 
     lines.join("\n") + "\n"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::market::OhlcvRow;
+
+    fn row(date: &str, close: f64) -> OhlcvRow {
+        OhlcvRow {
+            date: date.to_string(),
+            open: close,
+            high: close + 1.0,
+            low: close - 1.0,
+            close,
+            volume: 1000.0,
+        }
+    }
+
+    #[test]
+    fn test_fmt_val() {
+        assert_eq!(fmt_val(1.23456), "1.2346");
+        assert_eq!(fmt_val(f64::NAN), "N/A");
+        assert_eq!(fmt_val(f64::INFINITY), "N/A");
+        assert_eq!(fmt_val(f64::NEG_INFINITY), "N/A");
+        assert_eq!(fmt_val(0.0), "0.0000");
+    }
+
+    #[test]
+    fn test_sma_basic() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let result = sma(&data, 3);
+        assert!(result[0].is_nan());
+        assert!(result[1].is_nan());
+        assert!((result[2] - 2.0).abs() < 1e-10);
+        assert!((result[3] - 3.0).abs() < 1e-10);
+        assert!((result[4] - 4.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_sma_insufficient_data() {
+        let data = vec![1.0, 2.0];
+        let result = sma(&data, 5);
+        assert!(result.iter().all(|v| v.is_nan()));
+    }
+
+    #[test]
+    fn test_ema_basic() {
+        let data = vec![1.0, 2.0, 3.0];
+        let result = ema(&data, 3);
+        // alpha = 2/(3+1) = 0.5
+        assert!((result[0] - 1.0).abs() < 1e-10);
+        assert!((result[1] - 1.5).abs() < 1e-10);
+        assert!((result[2] - 2.25).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_ema_empty() {
+        let result = ema(&[], 3);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_rolling_std_constant() {
+        let data = vec![5.0, 5.0, 5.0, 5.0];
+        let result = rolling_std(&data, 3);
+        assert!(result[0].is_nan());
+        assert!(result[1].is_nan());
+        assert!((result[2] - 0.0).abs() < 1e-10);
+        assert!((result[3] - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_true_range() {
+        let high = vec![10.0, 12.0];
+        let low = vec![8.0, 9.0];
+        let close = vec![9.0, 11.0];
+        let tr = true_range(&high, &low, &close);
+        assert!((tr[0] - 2.0).abs() < 1e-10); // 10-8
+        assert!((tr[1] - 3.0).abs() < 1e-10); // max(12-9, |12-9|, |9-9|) = 3
+    }
+
+    #[test]
+    fn test_compute_indicators_insufficient_data() {
+        let data = vec![row("2024-01-01", 100.0), row("2024-01-02", 101.0)];
+        let result = compute_indicators(&data);
+        assert!(result.contains("数据列不全"));
+    }
+
+    #[test]
+    fn test_compute_indicators_has_table() {
+        let data: Vec<OhlcvRow> = (0..60)
+            .map(|i| {
+                row(
+                    &format!("2024-{:02}-{:02}", i / 28 + 1, i % 28 + 1),
+                    100.0 + i as f64,
+                )
+            })
+            .collect();
+        let result = compute_indicators(&data);
+        assert!(result.contains("技术指标快照"));
+        assert!(result.contains("SMA50"));
+        assert!(result.contains("RSI(14)"));
+    }
+
+    #[test]
+    fn test_compute_stats_empty() {
+        let result = compute_stats(&[]);
+        assert!(result.contains("数据不足"));
+    }
+
+    #[test]
+    fn test_compute_stats_basic() {
+        let data: Vec<OhlcvRow> = (0..10)
+            .map(|i| row(&format!("2024-01-{:02}", i + 1), 100.0 + i as f64))
+            .collect();
+        let result = compute_stats(&data);
+        assert!(result.contains("区间收益率"));
+        assert!(result.contains("年化波动率"));
+    }
 }

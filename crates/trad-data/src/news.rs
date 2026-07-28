@@ -469,3 +469,49 @@ pub async fn fetch_news(client: &Client, symbol: &str, days: u32, limit: u32) ->
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_html() {
+        assert_eq!(strip_html("<b>hello</b>"), "hello");
+        assert_eq!(strip_html("<p>text</p>"), "text");
+        assert_eq!(strip_html("no tags"), "no tags");
+        assert_eq!(strip_html("<a href='url'>link</a>"), "link");
+        assert_eq!(strip_html(""), "");
+    }
+
+    #[test]
+    fn test_strip_jsonp() {
+        assert_eq!(strip_jsonp("jQuery({\"a\":1})"), "{\"a\":1}");
+        assert_eq!(strip_jsonp("callback(data)"), "data");
+        assert_eq!(strip_jsonp("noparens"), "noparens");
+        assert_eq!(strip_jsonp(""), "");
+    }
+
+    #[test]
+    fn test_urlencoding_encode() {
+        assert_eq!(urlencoding_encode("hello world"), "hello%20world");
+        assert_eq!(urlencoding_encode("AAPL"), "AAPL");
+        assert_eq!(urlencoding_encode("a&b=c"), "a%26b%3Dc");
+    }
+
+    #[test]
+    fn test_truncate() {
+        assert_eq!(truncate("short", 10), "short");
+        let long = "a".repeat(300);
+        let result = truncate(&long, 200);
+        assert!(result.ends_with("..."));
+        assert_eq!(result.chars().count(), 203); // 200 + "..."
+    }
+
+    #[test]
+    fn test_format_news_item() {
+        let item = format_news_item("Title", "Source", "Summary text");
+        assert!(item.contains("**Title**"));
+        assert!(item.contains("Source"));
+        assert!(item.contains("Summary text"));
+    }
+}

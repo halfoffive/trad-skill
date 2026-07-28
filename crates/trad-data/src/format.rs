@@ -76,3 +76,67 @@ pub fn ohlcv_to_csv(data: &[OhlcvRow]) -> String {
     }
     lines.join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::market::OhlcvRow;
+
+    fn row(date: &str, close: f64) -> OhlcvRow {
+        OhlcvRow {
+            date: date.to_string(),
+            open: close - 0.5,
+            high: close + 1.0,
+            low: close - 1.0,
+            close,
+            volume: 1000.0,
+        }
+    }
+
+    #[test]
+    fn test_empty_data() {
+        let opts = ReportOptions {
+            tail: 30,
+            indicators: true,
+            stats: false,
+            raw: false,
+        };
+        let result = build_compact_report("AAPL", "2024-01-01", "2024-06-30", &[], &opts);
+        assert!(result.contains("错误"));
+    }
+
+    #[test]
+    fn test_raw_mode() {
+        let data = vec![row("2024-01-01", 100.0), row("2024-01-02", 101.0)];
+        let opts = ReportOptions {
+            tail: 30,
+            indicators: false,
+            stats: false,
+            raw: true,
+        };
+        let result = build_compact_report("AAPL", "2024-01-01", "2024-01-02", &data, &opts);
+        assert!(result.starts_with("Date,Open,High,Low,Close,Volume"));
+        assert!(!result.contains("技术指标"));
+    }
+
+    #[test]
+    fn test_ohlcv_to_csv() {
+        let data = vec![row("2024-01-01", 100.0)];
+        let csv = ohlcv_to_csv(&data);
+        assert!(csv.starts_with("Date,Open,High,Low,Close,Volume"));
+        assert!(csv.contains("2024-01-01"));
+    }
+
+    #[test]
+    fn test_tail_truncation() {
+        let data: Vec<OhlcvRow> = (0..50).map(|i| row(&format!("d{}", i), 100.0)).collect();
+        let opts = ReportOptions {
+            tail: 10,
+            indicators: false,
+            stats: false,
+            raw: false,
+        };
+        let result = build_compact_report("TEST", "d0", "d49", &data, &opts);
+        assert!(result.contains("最近 10 行"));
+    }
+}
