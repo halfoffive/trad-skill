@@ -77,8 +77,10 @@ pub fn parse_eastmoney_klines(
         let date = fields[0].to_string();
 
         // 日期过滤（港股 API 返回全量数据时需要）
+        // klines 日期格式为 YYYY-MM-DD，date_range 为 YYYYMMDD，需去掉短横线再比较
         if let Some((start, end)) = date_range {
-            if date.as_str() < start || date.as_str() > end {
+            let date_compact = date.replace('-', "");
+            if date_compact.as_str() < start || date_compact.as_str() > end {
                 continue;
             }
         }
@@ -142,5 +144,49 @@ mod tests {
     fn test_detect_crypto() {
         assert_eq!(detect_market("BTC-USD"), Market::Crypto);
         assert_eq!(detect_market("ETH-USD"), Market::Crypto);
+    }
+
+    #[test]
+    fn test_parse_eastmoney_klines_basic() {
+        let klines = vec![
+            serde_json::json!("2024-01-02,100.0,101.0,102.0,99.0,5000,12345,1.5,0.5,0.5,0.3"),
+            serde_json::json!("2024-01-03,101.0,103.0,104.0,100.0,6000,23456,2.0,1.0,1.0,0.4"),
+        ];
+        let rows = parse_eastmoney_klines(&klines, None);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].date, "2024-01-02");
+        assert!((rows[0].open - 100.0).abs() < 1e-10);
+        assert!((rows[0].close - 101.0).abs() < 1e-10); // 收盘在开盘后面
+        assert!((rows[0].high - 102.0).abs() < 1e-10);
+        assert!((rows[0].low - 99.0).abs() < 1e-10);
+        assert!((rows[0].volume - 5000.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_parse_eastmoney_klines_date_filter() {
+        let klines = vec![
+            serde_json::json!("2024-01-01,10,11,12,9,100"),
+            serde_json::json!("2024-01-15,20,21,22,19,200"),
+            serde_json::json!("2024-02-01,30,31,32,29,300"),
+        ];
+        let rows = parse_eastmoney_klines(&klines, Some(("20240110", "20240120")));
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].date, "2024-01-15");
+    }
+
+    #[test]
+    fn test_parse_eastmoney_klines_skip_short() {
+        let klines = vec![
+            serde_json::json!("2024-01-01,10,11"), // 太少字段
+            serde_json::json!("2024-01-02,10,11,12,9,100"),
+        ];
+        let rows = parse_eastmoney_klines(&klines, None);
+        assert_eq!(rows.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_eastmoney_klines_empty() {
+        let rows = parse_eastmoney_klines(&[], None);
+        assert!(rows.is_empty());
     }
 }
