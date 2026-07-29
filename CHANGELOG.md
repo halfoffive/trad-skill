@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-07-29
+
+### Added
+
+- **Platform binary delivery via npm optionalDependencies**: 5 platform-specific packages (`@trad-skill/{win32-x64,win32-arm64,darwin-arm64,linux-x64,linux-arm64}`) published alongside the main package. Users now download only their platform's ~4MB binary instead of all 7 (~28MB). Follows the esbuild/@swc/core distribution pattern.
+
+### Fixed
+
+- **Install commands updated**: `npx halfoffive/trad-skill` → `npx trad-skill` in both READMEs (package published on npmjs.com).
+- **Installer binary resolution**: no longer reports "binary not found" — resolves from `@trad-skill/<platform>` optionalDependency package via `createRequire`.
+
+### Changed
+
+- **npm publishing**: release workflow now publishes 5 platform packages + main package (scoped `@trad-skill/*`, `--access public`). NPM_TOKEN retained temporarily; OIDC migration deferred.
+- **GitHub Actions upgraded to Node 24 runtime**: `actions/checkout` v5→v6, `actions/setup-node` v4→v5, `softprops/action-gh-release` v2→v3.
+- `package.json` `version`: `1.5.0` → `1.5.1`.
+- `crates/trad-data/Cargo.toml` `version`: `1.5.0` → `1.5.1`.
+
 ## [1.5.0] - 2026-07-28
 
 ### Changed
