@@ -1,0 +1,10 @@
+{
+  "name": "@trad-skill/win32-x64",
+  "version": "1.5.1",
+  "description": "trad-data binary for Windows x64",
+  "license": "Apache-2.0",
+  "repository": "github:halfoffive/trad-skill",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": ["trad-data.exe"]
+}
