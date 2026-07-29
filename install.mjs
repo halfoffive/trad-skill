@@ -54,9 +54,9 @@ function help() {
   console.log(`trad-skill — 安装 tradingagents-analysis 技能
 
 用法:
-  npx halfoffive/trad-skill              安装到 ~/.claude/skills (Claude Code)
-  npx halfoffive/trad-skill --agent agents   安装到 ~/.agents/skills
-  npx halfoffive/trad-skill --dir <path> 安装到指定目录
+  npx trad-skill              安装到 ~/.claude/skills (Claude Code)
+  npx trad-skill --agent agents   安装到 ~/.agents/skills
+  npx trad-skill --dir <path> 安装到指定目录
 
 选项:
   --dir <path>        目标 skills 目录的父目录
@@ -67,7 +67,7 @@ function help() {
 
 function fail(msg) {
   console.error(`✗ ${msg}`);
-  console.error('  运行 npx halfoffive/trad-skill --help 查看用法。');
+  console.error('  运行 npx trad-skill --help 查看用法。');
   process.exit(1);
 }
 
