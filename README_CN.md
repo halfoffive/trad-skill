@@ -48,22 +48,22 @@ npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
 npx skills add halfoffive/trad-skill --skill tradingagents-analysis -y
 ```
 
-### 通过 npx 安装（自定义安装器，Claude Code 默认）
+### 通过 npx 安装（自定义安装器）
 
 旧版自定义安装器，默认将技能复制到 `~/.claude/skills/tradingagents-analysis`：
 
 ```bash
-npx halfoffive/trad-skill
+npx trad-skill
 ```
 
 可选参数：
 ```bash
-npx halfoffive/trad-skill --agent agents      # 安装到 ~/.agents/skills
-npx halfoffive/trad-skill --agent opencode   # 安装到 ~/.config/opencode/skills
-npx halfoffive/trad-skill --dir <path>       # 安装到自定义技能目录
+npx trad-skill --agent agents      # 安装到 ~/.agents/skills
+npx trad-skill --agent opencode   # 安装到 ~/.config/opencode/skills
+npx trad-skill --dir <path>       # 安装到自定义技能目录
 ```
 
-> 若 `npx halfoffive/trad-skill` 在你的 npx 版本上没有自动运行安装器，请使用 `npx -p halfoffive/trad-skill trad-skill`。
+> 若 `npx trad-skill` 在你的 npx 版本上没有自动运行安装器，请使用 `npx -p trad-skill trad-skill`。
 
 ### 给 AI 代理的说明
 

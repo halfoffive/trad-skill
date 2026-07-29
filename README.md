@@ -52,22 +52,22 @@ npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
 npx skills add halfoffive/trad-skill --skill tradingagents-analysis -y
 ```
 
-### Via npx (custom installer, Claude Code default)
+### Via npx (custom installer)
 
 The legacy custom installer copies the skill into `~/.claude/skills/tradingagents-analysis` by default:
 
 ```bash
-npx halfoffive/trad-skill
+npx trad-skill
 ```
 
 Options:
 ```bash
-npx halfoffive/trad-skill --agent agents      # install to ~/.agents/skills
-npx halfoffive/trad-skill --agent opencode   # install to ~/.config/opencode/skills
-npx halfoffive/trad-skill --dir <path>       # install into a custom skills dir
+npx trad-skill --agent agents      # install to ~/.agents/skills
+npx trad-skill --agent opencode   # install to ~/.config/opencode/skills
+npx trad-skill --dir <path>       # install into a custom skills dir
 ```
 
-> If `npx halfoffive/trad-skill` does not auto-run the installer on your npx version, use `npx -p halfoffive/trad-skill trad-skill`.
+> If `npx trad-skill` does not auto-run the installer on your npx version, use `npx -p trad-skill trad-skill`.
 
 ### For AI Agents
 
