@@ -3,6 +3,7 @@
 // 零依赖、纯 Node ESM。用法：npx halfoffive/trad-skill [--dir <path>] [--agent claude|agents|opencode]
 
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -111,16 +112,35 @@ const destDir = path.resolve(parentDir, SKILL_NAME);
 // 幂等：先删旧目录再复制（含 mkdirSync 父目录创建，统一在 try/catch 内）
 // 旧版本 mkdirSync 在 try/catch 之外，权限不足 / 路径非法时会抛裸 Node 堆栈；
 // 移入既有 try/catch 走 fail() 友好提示。
+const platformKey = `${os.platform()}-${os.arch()}`;
+const binExt = os.platform() === 'win32' ? '.exe' : '';
+let binarySource = null;
+
 try {
   fs.mkdirSync(parentDir, { recursive: true });
   if (fs.existsSync(destDir)) {
     fs.rmSync(destDir, { recursive: true, force: true });
   }
   fs.cpSync(SRC_DIR, destDir, { recursive: true });
-  // 复制 trad-data 二进制
-  const srcBin = path.join(__dirname, 'bin');
-  if (fs.existsSync(srcBin)) {
-    fs.cpSync(srcBin, path.join(destDir, 'bin'), { recursive: true });
+
+  // 复制 trad-data wrapper（始终需要）
+  const srcWrapper = path.join(__dirname, 'bin', 'trad-data-wrapper.js');
+  const destBinDir = path.join(destDir, 'bin');
+  fs.mkdirSync(destBinDir, { recursive: true });
+  fs.copyFileSync(srcWrapper, path.join(destBinDir, 'trad-data-wrapper.js'));
+
+  // 从 npm optionalDependency 平台包解析二进制
+  const require2 = createRequire(import.meta.url);
+  try {
+    binarySource = require2.resolve(`@trad-skill/${platformKey}/trad-data${binExt}`);
+  } catch (e) {
+    // 平台包未安装（可选依赖可能因网络/平台不匹配而跳过）
+  }
+
+  if (binarySource) {
+    const destPlatformDir = path.join(destBinDir, platformKey);
+    fs.mkdirSync(destPlatformDir, { recursive: true });
+    fs.copyFileSync(binarySource, path.join(destPlatformDir, `trad-data${binExt}`));
   }
 } catch (e) {
   fail(`安装失败：${e.message}`);
@@ -128,23 +148,18 @@ try {
 
 console.log(`✓ 已安装 ${SKILL_NAME} → ${destDir}`);
 console.log('');
-// 检查 trad-data 二进制是否已安装
-const binDir = path.join(__dirname, 'bin');
-const platformKey = `${os.platform()}-${os.arch()}`;
-const binExt = os.platform() === 'win32' ? '.exe' : '';
-const hasBinary = fs.existsSync(path.join(binDir, platformKey, `trad-data${binExt}`));
-
 console.log('下一步：');
-if (hasBinary) {
+if (binarySource) {
   console.log(`  ✓ trad-data 二进制已安装 (${platformKey})`);
 } else {
-  console.log('  ⚠ trad-data 二进制未找到，请确认安装包完整。');
+  console.log(`  ⚠ 平台包 @trad-skill/${platformKey} 未安装，数据工具不可用。`);
+  console.log(`    运行 npm install @trad-skill/${platformKey} 或重新安装。`);
 }
 console.log('  1. 重启你的 AI agent / 开一个新会话，让它加载该技能。');
 console.log('  2. 触发分析，例如："分析 AAPL" 或 "Analyze 600519" 。');
 console.log('');
 console.log('数据工具（Rust二进制）:');
-console.log('  trad-data stock --symbol AAPL');
+console.log('  trad-data market --symbol AAPL');
 console.log('  trad-data fundamentals --symbol AAPL');
 console.log('  trad-data news --symbol AAPL');
 console.log('  trad-data sentiment --symbol AAPL');

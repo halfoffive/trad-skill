@@ -1,0 +1,10 @@
+{
+  "name": "@trad-skill/linux-arm64",
+  "version": "1.5.1",
+  "description": "trad-data binary for Linux ARM64 (musl, statically linked)",
+  "license": "Apache-2.0",
+  "repository": "github:halfoffive/trad-skill",
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": ["trad-data"]
+}
