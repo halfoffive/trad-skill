@@ -2,18 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.5.3] - 2026-07-30
+## [1.5.4] - 2026-07-30
 
 ### Fixed
 
 - **npm publish ENEEDAUTH in CI**: restored `registry-url` in `actions/setup-node` (required for OIDC Trusted Publishing to locate the registry); added post-setup step to strip deprecated `always-auth` line from generated `.npmrc`.
 - **npm publish warnings resolved**: `repository` field changed from shorthand string to object form in all 6 package.json files.
+- **GitHub Release creation on workflow_dispatch**: added explicit `tag_name` to `softprops/action-gh-release` so releases work with both tag push and manual dispatch.
+- **Platform package re-publish tolerance**: publish step now skips already-published versions with a warning instead of failing the entire job.
 
 ### Changed
 
 - **npm Trusted Publishing (OIDC)**: release workflow publishes via `--provenance` with GitHub Actions OIDC — `NPM_TOKEN` secret no longer required.
-- `package.json` `version`: `1.5.1` → `1.5.3`.
-- `crates/trad-data/Cargo.toml` `version`: `1.5.1` → `1.5.3`.
+- `package.json` `version`: `1.5.1` → `1.5.4`.
+- `crates/trad-data/Cargo.toml` `version`: `1.5.1` → `1.5.4`.
 
 ## [1.5.1] - 2026-07-29
 
