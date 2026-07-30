@@ -245,7 +245,6 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Download all artifacts
         uses: actions/download-artifact@v7
@@ -268,12 +267,6 @@ jobs:
           for dir in npm/*/; do
             npm publish "$dir" --provenance --access public
           done
-        env:
-          # TODO: migrate to npm trusted publishing (OIDC) — remove NODE_AUTH_TOKEN once verified
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish main package
         run: npm publish --provenance --access public
-        env:
-          # TODO: migrate to npm trusted publishing (OIDC) — remove NODE_AUTH_TOKEN once verified
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
