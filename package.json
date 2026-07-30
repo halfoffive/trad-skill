@@ -1,6 +1,6 @@
 {
   "name": "trad-skill",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Installable TradingAgents multi-agent stock-analysis skill (Claude Code / Cursor / Windsurf / Trae / OpenCode via vercel-labs/skills)",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "git+https://github.com/halfoffive/trad-skill.git" },
@@ -35,10 +35,10 @@
     "windsurf"
   ],
   "optionalDependencies": {
-    "@trad-skill/win32-x64": "1.5.3",
-    "@trad-skill/win32-arm64": "1.5.3",
-    "@trad-skill/darwin-arm64": "1.5.3",
-    "@trad-skill/linux-x64": "1.5.3",
-    "@trad-skill/linux-arm64": "1.5.3"
+    "@trad-skill/win32-x64": "1.5.4",
+    "@trad-skill/win32-arm64": "1.5.4",
+    "@trad-skill/darwin-arm64": "1.5.4",
+    "@trad-skill/linux-x64": "1.5.4",
+    "@trad-skill/linux-arm64": "1.5.4"
   }
 }
