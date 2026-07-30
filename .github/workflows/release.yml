@@ -269,7 +269,16 @@ jobs:
       - name: Publish platform packages
         run: |
           for dir in npm/*/; do
-            npm publish "$dir" --provenance --access public
+            output=$(npm publish "$dir" --provenance --access public 2>&1) && rc=0 || rc=$?
+            echo "$output"
+            if [ $rc -ne 0 ]; then
+              if echo "$output" | grep -q "cannot publish over"; then
+                echo "::warning::$(basename $dir) already published, skipping"
+              else
+                echo "::error::$(basename $dir) publish failed"
+                exit 1
+              fi
+            fi
           done
 
       - name: Publish main package
