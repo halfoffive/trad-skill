@@ -245,6 +245,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Remove deprecated always-auth from .npmrc
+        run: sed -i '/always-auth/d' .npmrc 2>/dev/null || true
 
       - name: Download all artifacts
         uses: actions/download-artifact@v7

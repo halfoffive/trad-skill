@@ -2,17 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.5.2] - 2026-07-30
+## [1.5.3] - 2026-07-30
 
 ### Fixed
 
-- **npm publish warnings resolved**: `repository` field changed from shorthand string to object form in all 6 package.json files; `always-auth` deprecation warning eliminated by removing `registry-url` from `actions/setup-node`.
+- **npm publish ENEEDAUTH in CI**: restored `registry-url` in `actions/setup-node` (required for OIDC Trusted Publishing to locate the registry); added post-setup step to strip deprecated `always-auth` line from generated `.npmrc`.
+- **npm publish warnings resolved**: `repository` field changed from shorthand string to object form in all 6 package.json files.
 
 ### Changed
 
-- **npm Trusted Publishing (OIDC)**: release workflow now publishes via `--provenance` with GitHub Actions OIDC — `NPM_TOKEN` secret no longer required.
-- `package.json` `version`: `1.5.1` → `1.5.2`.
-- `crates/trad-data/Cargo.toml` `version`: `1.5.1` → `1.5.2`.
+- **npm Trusted Publishing (OIDC)**: release workflow publishes via `--provenance` with GitHub Actions OIDC — `NPM_TOKEN` secret no longer required.
+- `package.json` `version`: `1.5.1` → `1.5.3`.
+- `crates/trad-data/Cargo.toml` `version`: `1.5.1` → `1.5.3`.
 
 ## [1.5.1] - 2026-07-29
 
