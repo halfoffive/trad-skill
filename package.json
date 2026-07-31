@@ -1,16 +1,15 @@
 {
   "name": "trad-skill",
   "version": "1.5.4",
-  "description": "Installable TradingAgents multi-agent stock-analysis skill (Claude Code / Cursor / Windsurf / Trae / OpenCode via vercel-labs/skills)",
+  "description": "Installable TradingAgents multi-agent stock-analysis skill (bunx/npx; Rust installer; Claude Code / Cursor / Windsurf / Trae / OpenCode)",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "git+https://github.com/halfoffive/trad-skill.git" },
   "homepage": "https://github.com/halfoffive/trad-skill",
   "bin": {
-    "trad-skill": "install.mjs",
+    "trad-skill": "bin/trad-skill.js",
     "trad-data": "bin/trad-data-wrapper.js"
   },
   "files": [
-    "install.mjs",
     "bin/",
     "skills/",
     "README.md",

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // trad-data wrapper: 检测平台并调用对应的预编译二进制
-// 双路径解析：1) install.mjs 安装到技能目录的本地二进制  2) npm optionalDependency 平台包
+// 双路径解析：1) install 子命令复制到技能目录的本地二进制  2) npm optionalDependency 平台包
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
