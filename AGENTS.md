@@ -2,17 +2,17 @@
 
 ## What this repo is
 
-An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `npx halfoffive/trad-skill`.
+An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `bunx trad-skill` (default target: `~/.agents/skills`); `npx trad-skill` works as a fallback.
 
-The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ + bin/). Rust source lives in `crates/trad-data/` with CI (cargo fmt/clippy/test + 7-platform cross-build) in `.github/workflows/ci.yml`.
+The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ + bin/). Rust source lives in `crates/trad-data/` — the binary serves as both the **data tool** and the **installer** (`trad-data install` subcommand) — with CI (cargo fmt/clippy/test + 7-platform cross-build) in `.github/workflows/ci.yml`.
 
 ## Structure
 
 ```
 trad-skill/                        # repo root (meta files + installer)
-├── package.json                  # npx entry point (name: trad-skill)
-├── install.mjs                   # zero-dependency installer
-├── bin/trad-data-wrapper.js      # cross-platform binary wrapper
+├── package.json                  # npm entry point (name: trad-skill)
+├── bin/trad-skill.js             # thin JS launcher -> Rust installer
+├── bin/trad-data-wrapper.js      # cross-platform binary wrapper (runtime)
 ├── README.md / README_CN.md       # bilingual docs with language switch
 ├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # this file
@@ -29,23 +29,28 @@ trad-skill/                        # repo root (meta files + installer)
 
 ## Install commands
 
-Recommended (universal, 70+ agents via [vercel-labs/skills](https://github.com/vercel-labs/skills)):
+Recommended (Rust installer via bunx; default target `~/.agents/skills`):
 ```bash
-npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+bunx trad-skill                  # install to ~/.agents/skills (default)
+bunx trad-skill --agent claude   # install to ~/.claude/skills
+bunx trad-skill --dry-run        # print plan, write nothing
 ```
 
-Custom installer (legacy, Claude Code default):
-```bash
-npx halfoffive/trad-skill
-```
+Fallback (no `bun`): `npx trad-skill` behaves identically.
 
-## Installer (`package.json` + `install.mjs`)
+Data tool without installing: `bunx trad-data stock --symbol AAPL` (also `news` / `fundamentals` / `sentiment`).
 
-- `bin.trad-skill` → `install.mjs`, a zero-dependency Node ESM script.
-- Copies `skills/tradingagents-analysis/` into the target agent's skills dir. Default target: `~/.claude/skills/tradingagents-analysis` (Claude Code). Flags: `--dir <path>`, `--agent claude|agents|opencode`.
-- Also copies `bin/` (trad-data Rust binary) into the skill directory.
-- Idempotent (removes existing dir first). Prints next steps on success.
-- The `files` field in `package.json` controls what npx packs: `install.mjs`, `bin/`, `skills/`, and the doc/LICENSE files.
+Deprecated: the third-party `npx skills add halfoffive/trad-skill ...` flow (vercel-labs/skills) still works but is no longer recommended.
+
+## Installer (`package.json` + `bin/trad-skill.js` + `trad-data install`)
+
+The installer logic is **Rust**, in the `trad-data install` subcommand (`crates/trad-data/src/install.rs`). The npm `trad-skill` bin entry is a zero-logic CJS launcher (`bin/trad-skill.js`) that resolves the platform binary (same two-strategy logic as `bin/trad-data-wrapper.js`) and execs `trad-data install --skills-dir <pkgRoot>/skills/tradingagents-analysis`.
+
+- Copies `skills/tradingagents-analysis/` into the target agent's skills dir. **Default target: `~/.agents/skills`** (generic agent directory). Flags: `--dir <path>`, `--agent claude|agents|opencode` (mutually exclusive).
+- Copies `bin/trad-data-wrapper.js` into the skill's `bin/`, and copies the platform binary into `bin/<node-platform-key>/` via **self-copy** (`std::env::current_exe()`). `--bin-path` / `--no-bin` override.
+- Idempotent (removes existing dir first). `--dry-run` prints the plan without writing.
+- `node_platform_key()` in `install.rs` maps rustc target consts → node platform/arch naming; this key MUST match `bin/trad-data-wrapper.js` strategy-1 path. Keep them in sync (unit-tested).
+- The `files` field in `package.json` controls what bunx/npx packs: `bin/`, `skills/`, and the doc/LICENSE files.
 
 ## Source repos (read-only reference)
 
@@ -75,15 +80,20 @@ x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-unknown-linux-musl, 
 When adding/removing targets, update: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `bin/trad-data-wrapper.js`.
 
 ### Release
-- Version in `package.json` `version` field.
+- Version lives in **7 files that must stay in sync** (a desync silently breaks platform package install):
+  `package.json` (+ its 5 `optionalDependencies` `@trad-skill/*` pins), `crates/trad-data/Cargo.toml`, and all 5 `npm/<platform>/package.json`.
 - Update `CHANGELOG.md` before release.
-- Push tag `vX.Y.Z` to trigger the release workflow (`.github/workflows/release.yml`).
+- Push tag `vX.Y.Z` to trigger the release workflow (`.github/workflows/release.yml`). CI builds the same 7 binaries; the `install` subcommand ships with them — no new artifacts.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model (GitHub Flow), Conventional Commits conventions, PR checklist, and the release 7-file version-bump procedure.
 
 ## Gotchas
 
 - `.omo/` is gitignored orchestration state — never commit it.
 - `.codegraph/` exists for indexing — ignore it.
-- `.trae/specs/` is the trae agent spec workflow state (spec.md / tasks.md / checklist.md), tracked in git; unlike `.omo/`, do NOT gitignore.
+- `.trae/` (Trae IDE state) is gitignored and not tracked — do not commit it.
 - `uv` is available; use `uv run python` for quick script checks if needed.
 - Skill files live in `skills/tradingagents-analysis/` — this is the single source of truth.
 - Rust source lives in `crates/trad-data/`. Run `cargo fmt`, `cargo clippy`, `cargo test` before committing.
