@@ -2,6 +2,7 @@ mod format;
 mod fundamentals;
 mod http;
 mod indicators;
+mod install;
 mod market;
 mod news;
 mod sentiment;
@@ -59,6 +60,11 @@ enum Commands {
         symbol: String,
         #[arg(long, default_value_t = 15)]
         limit: u32,
+    },
+    /// 安装 tradingagents-analysis 技能到 AI agent 的 skills 目录（原 install.mjs 的 Rust 实现）
+    Install {
+        #[command(flatten)]
+        args: install::InstallArgs,
     },
 }
 
@@ -159,6 +165,10 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
             println!("{}", result);
+        }
+        Commands::Install { args } => {
+            // 安装无需网络/HTTP 客户端：直接委派给 install 模块后返回
+            install::run(args)?;
         }
     }
 
