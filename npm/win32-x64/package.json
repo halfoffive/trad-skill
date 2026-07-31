@@ -1,6 +1,6 @@
 {
   "name": "@trad-skill/win32-x64",
-  "version": "1.5.4",
+  "version": "1.6.0",
   "description": "trad-data binary for Windows x64",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "git+https://github.com/halfoffive/trad-skill.git" },

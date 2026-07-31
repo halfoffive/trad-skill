@@ -10,6 +10,9 @@ crates/trad-data/target/
 # Node
 node_modules/
 
+# npm pack artifacts
+*.tgz
+
 # OS
 .DS_Store
 Thumbs.db

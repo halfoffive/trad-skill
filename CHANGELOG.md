@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-07-31
+
+### Added
+
+- **Rust installer**: skill installation is now handled by the `trad-data install` subcommand (Rust, `crates/trad-data/src/install.rs`) instead of the Node `install.mjs`. The npm `trad-skill` bin entry is a thin JS launcher (`bin/trad-skill.js`) that resolves the platform binary and execs the Rust installer.
+- **`bunx` support**: `bunx trad-skill` installs the skill (or `npx trad-skill`, identical); `bunx trad-data <subcommand>` runs the data tool directly with no install.
+- **`--dry-run`** flag: print the install plan without writing anything.
+- **CONTRIBUTING.md** and a GitHub PR template: branching model (GitHub Flow), Conventional Commits, PR checklist, and the explicit 7-file release version-bump procedure.
+
+### Changed
+
+- **Default install target is now `~/.agents/skills`** (generic agent directory) instead of `~/.claude/skills`. Use `--agent claude` / `--agent opencode` / `--dir <path>` to override.
+- **Installer architecture**: installer logic moved from `install.mjs` (Node ESM) into the Rust binary; the platform binary is self-copied via `std::env::current_exe()`.
+- `npx skills add ...` (vercel-labs/skills CLI) is **deprecated** in the docs in favor of `bunx trad-skill`.
+
+### Fixed
+
+- **Doc examples**: `trad-data market ...` → `trad-data stock ...` (the clap subcommand is `stock`, not `market`) in both READMEs.
+- Structure tree in READMEs: `install.mjs` → `bin/trad-skill.js`; CI platform count 6 → 7.
+
 ## [1.5.4] - 2026-07-30
 
 ### Fixed
