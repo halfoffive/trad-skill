@@ -5,25 +5,23 @@ description: "Multi-agent stock/crypto trading analysis pipeline inspired by Tra
 
 ## For AI Agents: Installation Guide
 
-If this skill is not yet installed and you need to use it, install it via the standard skills CLI:
+If this skill is not yet installed and you need to use it, install it with the built-in Rust installer (default target: `~/.agents/skills`):
 
 ```bash
-npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+bunx trad-skill
 ```
 
-If the above fails, try the custom installer:
+Options: `--agent claude` (→ `~/.claude/skills`) or `--agent opencode` (→ `~/.config/opencode/skills`), or `--dir <path>` for a custom location. `npx trad-skill` works identically as a fallback.
 
-```bash
-npx halfoffive/trad-skill
-```
+> The legacy third-party `npx skills add halfoffive/trad-skill ...` flow is deprecated; prefer `bunx trad-skill`.
 
 After installation, the skill will be available at one of these locations (check in order):
+- `~/.agents/skills/tradingagents-analysis` (default; OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
 - `~/.claude/skills/tradingagents-analysis` (Claude Code)
-- `~/.agents/skills/tradingagents-analysis` (OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
 - `~/.config/opencode/skills/tradingagents-analysis` (OpenCode global)
 
 Data tool (Rust binary):
-  The `trad-data` binary is included. It provides stock, fundamentals, news, and sentiment data for US/HK/Crypto markets.
+  The `trad-data` binary is included. It provides stock, fundamentals, news, and sentiment data for US/HK/Crypto markets. If the bundled binary is missing, run any subcommand directly via `bunx trad-data <subcommand>`.
 
 Verify installation by checking that `SKILL.md` and `references/` exist in the skill directory.
 

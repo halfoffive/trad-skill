@@ -37,49 +37,50 @@ The pipeline runs in six stages:
 
 ## Installation
 
-### Via `npx skills` (recommended, universal for 70+ agents)
+### Via `bunx` (recommended)
 
-Use the standard [vercel-labs/skills](https://github.com/vercel-labs/skills) CLI — works with Claude Code, Cursor, Windsurf, Trae, OpenCode, Codex, and 70+ more agents:
-
-```bash
-# List available skills first
-npx skills add halfoffive/trad-skill --list
-
-# Install globally (user-level, all projects)
-npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
-
-# Or install to project-level
-npx skills add halfoffive/trad-skill --skill tradingagents-analysis -y
-```
-
-### Via npx (custom installer)
-
-The legacy custom installer copies the skill into `~/.claude/skills/tradingagents-analysis` by default:
+Install the skill with the built-in Rust installer (the `trad-data install` subcommand). `bunx` (or `npx`) fetches the package and runs a thin launcher that resolves your platform binary and installs the skill into the **generic agent directory** `~/.agents/skills` by default:
 
 ```bash
-npx trad-skill
+bunx trad-skill                     # install to ~/.agents/skills (default)
 ```
 
 Options:
 ```bash
-npx trad-skill --agent agents      # install to ~/.agents/skills
-npx trad-skill --agent opencode   # install to ~/.config/opencode/skills
-npx trad-skill --dir <path>       # install into a custom skills dir
+bunx trad-skill --agent claude      # install to ~/.claude/skills (Claude Code)
+bunx trad-skill --agent opencode    # install to ~/.config/opencode/skills
+bunx trad-skill --dir <path>        # install into a custom skills dir
+bunx trad-skill --dry-run           # print the install plan without writing
 ```
 
-> If `npx trad-skill` does not auto-run the installer on your npx version, use `npx -p trad-skill trad-skill`.
+> `npx trad-skill` behaves identically if you don't have `bun` installed. On older npx versions use `npx -p trad-skill trad-skill`.
+
+### Data tool without installing
+
+Run the `trad-data` binary directly via `bunx` (or `npx`) without installing the skill — handy for one-off data fetches:
+
+```bash
+bunx trad-data stock --symbol AAPL
+bunx trad-data news --symbol AAPL
+bunx trad-data fundamentals --symbol AAPL
+bunx trad-data sentiment --symbol AAPL
+```
 
 ### For AI Agents
 
 If you are an AI agent and need to install this skill, run:
 ```bash
-npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+bunx trad-skill
 ```
 
 Then restart or open a new session to load the skill. The skill will be available at:
+- `~/.agents/skills/tradingagents-analysis` (default; OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
 - `~/.claude/skills/tradingagents-analysis` (Claude Code)
-- `~/.agents/skills/tradingagents-analysis` (OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
 - `~/.config/opencode/skills/tradingagents-analysis` (OpenCode global)
+
+### Deprecated: `npx skills add` (vercel-labs/skills CLI)
+
+> **Deprecated.** The third-party `npx skills add halfoffive/trad-skill ...` flow (via [vercel-labs/skills](https://github.com/vercel-labs/skills)) is superseded by `bunx trad-skill`. It still works for now but is no longer recommended and may be removed in a future release.
 
 ### Manual installation (using raw GitHub links)
 
@@ -188,14 +189,14 @@ Market auto-detection: 6-digit pure number (e.g., 600519, 000858) → A-shares, 
 
 ```
 trad-skill/                        # repo root (meta files + installer)
-├── package.json                  # npx entry point (name: trad-skill)
-├── install.mjs                   # zero-dependency installer
+├── package.json                  # npm entry point (name: trad-skill)
+├── bin/trad-skill.js             # thin JS launcher -> Rust installer
 ├── bin/trad-data-wrapper.js      # cross-platform binary wrapper
 ├── README.md / README_CN.md       # bilingual docs with language switch
 ├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # AI-agent onboarding doc
 ├── LICENSE                        # Apache 2.0
-├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 6-platform build
+├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 7-platform build
 ├── crates/trad-data/              # Rust binary source (trad-data)
 └── skills/
     └── tradingagents-analysis/    # the installable skill
@@ -249,10 +250,13 @@ Data is fetched by the `trad-data` Rust binary, which provides market data (OHLC
 
 ```bash
 # Stock data: OHLCV tail + pre-computed indicators + optional stats
-trad-data market --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+
+# Or run directly via bunx (no install needed):
+bunx trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Or by absolute path (how the agent invokes them):
-~/.claude/skills/tradingagents-analysis/bin/trad-data market --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+~/.claude/skills/tradingagents-analysis/bin/trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Fetch news (default --limit 8 per source, summaries truncated)
 trad-data news --symbol AAPL --days 7 --limit 8
@@ -266,7 +270,7 @@ trad-data sentiment --symbol AAPL --limit 15
 
 | Subcommand | Defaults (compact) | Expand flags |
 |---|---|---|
-| `market` | `--tail 30` + `--indicators` on | `--stats`, `--raw` |
+| `stock` | `--tail 30` + `--indicators` on | `--stats`, `--raw` |
 | `news` | `--limit 8`, 200-char summaries | `--limit N`, `--days N` |
 | `fundamentals` | compact key-metrics table | — |
 | `sentiment` | `--limit 15`, 8 messages/posts shown | `--limit N` |

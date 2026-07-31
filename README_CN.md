@@ -33,49 +33,50 @@
 
 ## 安装
 
-### 通过 npx skills 安装（推荐，70+ 代理通用）
+### 通过 bunx 安装（推荐）
 
-使用标准的 [vercel-labs/skills](https://github.com/vercel-labs/skills) CLI — 支持 Claude Code、Cursor、Windsurf、Trae、OpenCode、Codex 等 70+ 种编码代理：
-
-```bash
-# 先查看可用技能
-npx skills add halfoffive/trad-skill --list
-
-# 全局安装（用户级，所有项目可用）
-npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
-
-# 或安装到项目级
-npx skills add halfoffive/trad-skill --skill tradingagents-analysis -y
-```
-
-### 通过 npx 安装（自定义安装器）
-
-旧版自定义安装器，默认将技能复制到 `~/.claude/skills/tradingagents-analysis`：
+使用内置的 Rust 安装器（`trad-data install` 子命令）安装技能。`bunx`（或 `npx`）拉取包并运行一个极简的 launcher，它解析当前平台的二进制并把技能安装到**通用 agent 目录** `~/.agents/skills`（默认）：
 
 ```bash
-npx trad-skill
+bunx trad-skill                     # 安装到 ~/.agents/skills（默认）
 ```
 
 可选参数：
 ```bash
-npx trad-skill --agent agents      # 安装到 ~/.agents/skills
-npx trad-skill --agent opencode   # 安装到 ~/.config/opencode/skills
-npx trad-skill --dir <path>       # 安装到自定义技能目录
+bunx trad-skill --agent claude      # 安装到 ~/.claude/skills（Claude Code）
+bunx trad-skill --agent opencode    # 安装到 ~/.config/opencode/skills
+bunx trad-skill --dir <path>        # 安装到自定义技能目录
+bunx trad-skill --dry-run           # 只打印安装计划，不写入
 ```
 
-> 若 `npx trad-skill` 在你的 npx 版本上没有自动运行安装器，请使用 `npx -p trad-skill trad-skill`。
+> 若未安装 `bun`，`npx trad-skill` 行为完全一致。旧版 npx 可用 `npx -p trad-skill trad-skill`。
+
+### 免安装直接使用数据工具
+
+无需安装技能即可通过 `bunx`（或 `npx`）直接运行 `trad-data` 二进制，适合一次性取数：
+
+```bash
+bunx trad-data stock --symbol AAPL
+bunx trad-data news --symbol AAPL
+bunx trad-data fundamentals --symbol AAPL
+bunx trad-data sentiment --symbol AAPL
+```
 
 ### 给 AI 代理的说明
 
 如果你是 AI 代理需要安装本技能，请运行：
 ```bash
-npx skills add halfoffive/trad-skill --skill tradingagents-analysis -g -y
+bunx trad-skill
 ```
 
 安装后重启或开启新会话以加载技能。技能将安装在以下位置之一：
+- `~/.agents/skills/tradingagents-analysis`（默认；OpenCode、Cline、Cursor、Windsurf、Codex 等）
 - `~/.claude/skills/tradingagents-analysis`（Claude Code）
-- `~/.agents/skills/tradingagents-analysis`（OpenCode、Cline、Cursor、Windsurf、Codex 等）
 - `~/.config/opencode/skills/tradingagents-analysis`（OpenCode 全局）
+
+### 已弃用：`npx skills add`（vercel-labs/skills CLI）
+
+> **已弃用。** 第三方 `npx skills add halfoffive/trad-skill ...` 流程（基于 [vercel-labs/skills](https://github.com/vercel-labs/skills)）已被 `bunx trad-skill` 取代。当前仍可用，但不再推荐，未来版本可能移除。
 
 ### 手动安装（使用 raw GitHub 链接直接复制）
 
@@ -189,13 +190,13 @@ rm -rf /tmp/trad-skill
 ```
 trad-skill/                        # 仓库根目录（元文件 + 安装器）
 ├── package.json                  # npx 入口（name: trad-skill）
-├── install.mjs                   # 零依赖安装器
-├── bin/trad-data-wrapper.js      # 跨平台二进制包装器
+├── bin/trad-skill.js             # 极简 JS launcher -> Rust 安装器
+├── bin/trad-data-wrapper.js      # 跨平台二进制 wrapper
 ├── README.md / README_CN.md       # 双语文档
 ├── CHANGELOG.md                   # 版本历史
 ├── AGENTS.md                      # AI 代理接入文档
 ├── LICENSE                        # Apache 2.0 许可证
-├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 6平台构建
+├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 7平台构建
 ├── crates/trad-data/              # Rust 二进制源码（trad-data）
 └── skills/
     └── tradingagents-analysis/    # 可安装的技能
@@ -257,10 +258,13 @@ trad-skill/                        # 仓库根目录（元文件 + 安装器）
 
 ```bash
 # 行情数据：尾部 OHLCV + 预计算指标 + 可选统计
-trad-data market --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+
+# 或通过 bunx 直接运行（免安装）：
+bunx trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 或用绝对路径调用（代理实际调用方式）：
-~/.claude/skills/tradingagents-analysis/bin/trad-data market --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+~/.claude/skills/tradingagents-analysis/bin/trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 获取新闻（默认 --limit 8，摘要截断）
 trad-data news --symbol AAPL --days 7 --limit 8
@@ -274,7 +278,7 @@ trad-data sentiment --symbol AAPL --limit 15
 
 | 子命令 | 默认值（紧凑） | 扩展参数 |
 |---|---|---|
-| `market` | `--tail 30` + `--indicators` 开启 | `--stats`, `--raw` |
+| `stock` | `--tail 30` + `--indicators` 开启 | `--stats`, `--raw` |
 | `news` | `--limit 8`，200字符摘要 | `--limit N`, `--days N` |
 | `fundamentals` | 精简关键指标表 | — |
 | `sentiment` | `--limit 15`，8条消息/帖子 | `--limit N` |
