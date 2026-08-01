@@ -310,33 +310,38 @@ async fn fetch_cn_sentiment(client: &Client, symbol: &str) -> String {
 
 /// 格式化A股千股千评数据表格
 fn format_cn_comment_table(data: &[Value]) -> String {
-    // 展示最近 10 条的关键字段
+    // 展示最近 10 条的关键字段：(显示名, 东方财富字段名, 是否整数)
+    // 字段名对应 datacenter RPT_DMSK_TS_STOCKNEW 的实际返回字段。
     let indicators = [
-        ("交易日期", "TRADE_DATE"),
-        ("收盘价", "CLOSE_PRICE"),
-        ("涨跌幅(%)", "CHANGE_RATE"),
-        ("综合得分", "COMMENT_SCORE"),
-        ("目前排名", "CURRENT_RANK"),
-        ("关注指数", "FOCUS_INDEX"),
+        ("交易日期", "TRADE_DATE", false),
+        ("收盘价", "CLOSE_PRICE", false),
+        ("涨跌幅(%)", "CHANGE_RATE", false),
+        ("综合得分", "TOTALSCORE", false),
+        ("目前排名", "RANK", true),
+        ("关注指数", "FOCUS", false),
     ];
 
     let display_count = data.len().min(10);
     let mut lines = Vec::new();
 
     // 表头
-    let header: Vec<&str> = indicators.iter().map(|(d, _)| *d).collect();
+    let header: Vec<&str> = indicators.iter().map(|(d, _, _)| *d).collect();
     lines.push(format!("| {} |", header.join(" | ")));
     lines.push(format!("|{}|", "---|".repeat(indicators.len())));
 
     for row in data.iter().take(display_count) {
         let mut cells = Vec::new();
-        for (_, field) in &indicators {
-            let val = row.get(field).unwrap_or(&Value::Null);
+        for (_, field, is_int) in &indicators {
+            let val = row.get(*field).unwrap_or(&Value::Null);
             let s = match val {
                 Value::Null => "N/A".to_string(),
                 Value::Number(n) => {
                     if let Some(f) = n.as_f64() {
-                        format!("{:.2}", f)
+                        if *is_int {
+                            format!("{:.0}", f)
+                        } else {
+                            format!("{:.2}", f)
+                        }
                     } else {
                         n.to_string()
                     }
@@ -423,5 +428,45 @@ pub async fn fetch_sentiment(client: &Client, symbol: &str, limit: u32) -> Strin
 
             sections.join("\n")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 验证 A股千股千评使用正确的东方财富字段名（修复 综合得分/目前排名/关注指数 N/A）。
+    #[test]
+    fn test_format_cn_comment_table() {
+        use serde_json::json;
+        let data = vec![json!({
+            "TRADE_DATE": "2026-07-31 00:00:00",
+            "CLOSE_PRICE": 95.77,
+            "CHANGE_RATE": -0.073,
+            "TOTALSCORE": 76.84826875,
+            "RANK": 104,
+            "FOCUS": 94.4
+        })];
+        let table = format_cn_comment_table(&data);
+        assert!(table.contains("76.85"), "TOTALSCORE 综合得分");
+        assert!(table.contains("94.40"), "FOCUS 关注指数");
+        // RANK 应整数显示（不含小数）
+        assert!(table.contains("| 104 |"), "RANK 目前排名应整数: {}", table);
+        // 无 N/A
+        assert!(!table.contains("N/A"), "不应有 N/A: {}", table);
+    }
+
+    // A股情绪走东方财富，国内网络即可达。
+    #[tokio::test]
+    #[ignore = "hits the live Eastmoney API"]
+    async fn test_live_sentiment_cn() {
+        let client = crate::http::build_client().unwrap();
+        let out = fetch_sentiment(&client, "002594", 15).await;
+        assert!(out.contains("个股评论"), "应包含个股评论段落");
+        // 修复后 综合得分/目前排名/关注指数 不应再全为 N/A
+        assert!(
+            !out.contains("| N/A | N/A | N/A |"),
+            "综合得分/排名/关注指数不应全 N/A"
+        );
     }
 }
