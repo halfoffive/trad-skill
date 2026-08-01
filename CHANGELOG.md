@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2] - 2026-08-01
+
+### Fixed
+
+- **A股基本面「关键财务指标」表 7/8 指标为 N/A**：`build_cn_financial_table` 使用的东方财富字段名（`BASIC_EPS` / `BASIC_BPS` / `WEIGHTAVG_ROE` / `TOTAL_OPERATE_INCOME` / `PARENT_NETPROFIT` / `XSJLR` / `OPERATE_CASHFLOW`）在 `RPT_F10_FINANCE_MAINFINADATA` 中并不存在。改为实际字段：`EPSJB` / `BPS` / `ROEJQ` / `TOTALOPERATEREVE` / `PARENTNETPROFIT` / `XSMLL`(毛利率) / `XSJLL`(净利率) / `MGJYXJJE`。
+- **毛利率/净利率标反**：旧代码把 `XSJLL`（销售净利率）标成「毛利率」。现已区分 `XSMLL`=毛利率、`XSJLL`=净利率。
+
+### Changed
+
+- **A股基本面精表扩充至 14 项**：新增 每股经营现金流、ROIC、毛利、扣非净利润、营收同比、净利同比、资产负债率。
+- **金额按亿/万换算**：新增 `fmt_cn_amount`，营业总收入/毛利/净利润/扣非净利润等金额显示为「X.XX亿」（如 547.03亿），更易读。
+- HTTP user-agent 更新为 `trad-skill/1.8.2`。
+
+### Notes
+
+- `package.json` `version`: `1.8.1` → `1.8.2`（+ 5 个 `optionalDependencies` `@trad-skill/*` pin）。
+- `crates/trad-data/Cargo.toml` `version`: `1.8.1` → `1.8.2`。
+- 5 个 `npm/<platform>/package.json` `version`: `1.8.1` → `1.8.2`。
+
 ## [1.8.1] - 2026-08-01
 
 ### Fixed
