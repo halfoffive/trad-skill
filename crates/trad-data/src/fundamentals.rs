@@ -39,6 +39,35 @@ fn fmt_num(v: Option<&Value>) -> String {
     }
 }
 
+/// A股财务指标格式类型
+enum CnFmt {
+    /// 金额（元）：按亿/万换算，便于阅读
+    Amount,
+    /// 普通数值（每股指标、比率、同比等）：保留 2 位小数
+    Num,
+}
+
+/// A股金额格式化：≥1亿用「X.XX亿」，≥1万用「X.XX万」，否则保留 2 位小数。
+/// 缺失返回 "N/A"。
+fn fmt_cn_amount(v: Option<&Value>) -> String {
+    match v {
+        Some(Value::Number(n)) => match n.as_f64() {
+            Some(f) => {
+                let a = f.abs();
+                if a >= 1e8 {
+                    format!("{:.2}亿", f / 1e8)
+                } else if a >= 1e4 {
+                    format!("{:.2}万", f / 1e4)
+                } else {
+                    format!("{:.2}", f)
+                }
+            }
+            None => fmt_num(v),
+        },
+        _ => fmt_num(v),
+    }
+}
+
 /// 从嵌套 JSON 中按路径取值，如 get_nested(val, &["result", "0", "assetProfile", "sector"])
 fn get_nested<'a>(val: &'a Value, path: &[&str]) -> Option<&'a Value> {
     let mut cur = val;
@@ -409,16 +438,23 @@ fn build_cn_financial_table(data: &[Value]) -> String {
         return "> 无可用财务数据\n".to_string();
     }
 
-    // 要展示的指标行：(显示名, 字段名)
-    let indicators = [
-        ("每股收益", "BASIC_EPS"),
-        ("每股净资产", "BASIC_BPS"),
-        ("净资产收益率(%)", "WEIGHTAVG_ROE"),
-        ("营业总收入", "TOTAL_OPERATE_INCOME"),
-        ("净利润", "PARENT_NETPROFIT"),
-        ("毛利率(%)", "XSJLL"),
-        ("净利率(%)", "XSJLR"),
-        ("经营现金流", "OPERATE_CASHFLOW"),
+    // 要展示的指标行：(显示名, 东方财富字段名, 格式类型)
+    // 字段名对应 datacenter RPT_F10_FINANCE_MAINFINADATA 的实际返回字段。
+    let indicators: [(&str, &str, CnFmt); 14] = [
+        ("每股收益", "EPSJB", CnFmt::Num),
+        ("每股净资产", "BPS", CnFmt::Num),
+        ("每股经营现金流", "MGJYXJJE", CnFmt::Num),
+        ("净资产收益率(%)", "ROEJQ", CnFmt::Num),
+        ("ROIC(%)", "ROIC", CnFmt::Num),
+        ("营业总收入", "TOTALOPERATEREVE", CnFmt::Amount),
+        ("毛利", "MLR", CnFmt::Amount),
+        ("净利润(归母)", "PARENTNETPROFIT", CnFmt::Amount),
+        ("扣非净利润", "KCFJCXSYJLR", CnFmt::Amount),
+        ("毛利率(%)", "XSMLL", CnFmt::Num),
+        ("净利率(%)", "XSJLL", CnFmt::Num),
+        ("营收同比(%)", "TOTALOPERATEREVETZ", CnFmt::Num),
+        ("净利同比(%)", "PARENTNETPROFITTZ", CnFmt::Num),
+        ("资产负债率(%)", "ZCFZL", CnFmt::Num),
     ];
 
     let mut lines = Vec::new();
@@ -426,11 +462,15 @@ fn build_cn_financial_table(data: &[Value]) -> String {
     lines.push(header);
     lines.push(format!("|{}|", "---|".repeat(ncols + 1)));
 
-    for (display, field) in &indicators {
+    for (display, field, kind) in &indicators {
         let mut cells = vec![display.to_string()];
         for row in data {
-            let val = row.get(field).unwrap_or(&Value::Null);
-            cells.push(fmt_num(Some(val)));
+            let val = row.get(*field).unwrap_or(&Value::Null);
+            let cell = match kind {
+                CnFmt::Amount => fmt_cn_amount(Some(val)),
+                CnFmt::Num => fmt_num(Some(val)),
+            };
+            cells.push(cell);
         }
         lines.push(format!("| {} |", cells.join(" | ")));
     }
@@ -483,5 +523,51 @@ mod tests {
         let out = fetch_fundamentals(&client, "600519").await;
         assert!(!out.starts_with("错误"), "600519 基本面不应报错: {}", out);
         assert!(out.contains("个股基本信息"), "应包含个股基本信息段落");
+    }
+
+    #[test]
+    fn test_fmt_cn_amount() {
+        use serde_json::json;
+        assert_eq!(fmt_cn_amount(Some(&json!(54702912385.23))), "547.03亿");
+        assert_eq!(fmt_cn_amount(Some(&json!(12345.0))), "1.23万");
+        assert_eq!(fmt_cn_amount(Some(&json!(99.0))), "99.00");
+        assert_eq!(fmt_cn_amount(Some(&Value::Null)), "N/A");
+        assert_eq!(fmt_cn_amount(None), "N/A");
+    }
+
+    // 验证 A股财务表使用正确的东方财富字段名（修复 7/8 指标 N/A 的 bug）。
+    #[test]
+    fn test_build_cn_financial_table_fields() {
+        use serde_json::json;
+        let data = vec![json!({
+            "REPORT_DATE": "2026-03-31 00:00:00",
+            "EPSJB": 21.76,
+            "BPS": 216.32,
+            "MGJYXJJE": 21.49,
+            "ROEJQ": 10.57,
+            "ROIC": 9.83,
+            "TOTALOPERATEREVE": 54702912385.23,
+            "MLR": 48388523020.19,
+            "PARENTNETPROFIT": 27242512886.45,
+            "KCFJCXSYJLR": 27239985194.41,
+            "XSMLL": 89.76,
+            "XSJLL": 52.22,
+            "TOTALOPERATEREVETZ": 6.34,
+            "PARENTNETPROFITTZ": 1.47,
+            "ZCFZL": 12.12
+        })];
+        let table = build_cn_financial_table(&data);
+        // 报告期
+        assert!(table.contains("2026-03-31"));
+        // 每股 / 比率指标（正确字段）
+        assert!(table.contains("21.76"), "EPSJB 每股收益");
+        assert!(table.contains("89.76"), "XSMLL 毛利率");
+        assert!(table.contains("52.22"), "XSJLL 净利率");
+        assert!(table.contains("10.57"), "ROEJQ 净资产收益率");
+        // 金额指标按亿换算
+        assert!(table.contains("547.03亿"), "TOTALOPERATEREVE 营业总收入");
+        assert!(table.contains("272.43亿"), "PARENTNETPROFIT 净利润");
+        // 不应再出现整行 N/A（旧错误字段名导致）
+        assert!(!table.contains("| 每股收益 | N/A |"));
     }
 }
