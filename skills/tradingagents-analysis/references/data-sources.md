@@ -94,7 +94,7 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 AKShare → yfinance
 
 ### US Stock Data
-yfinance
+yfinance (Yahoo Finance) → Eastmoney push2his (via `stock --source eastmoney`, for Yahoo-blocked regions)
 
 ### HK Stock Data
 AKShare → yfinance
@@ -128,9 +128,21 @@ Data sources are configured via:
 Data fetching is implemented in Rust (`trad-skill` binary) for all markets including US, HK, Crypto, and China A-shares.
 
 ### Rust Binary: trad-skill
-- US stocks: Yahoo Finance v8/v10 API (direct HTTP)
+- US stocks: Yahoo Finance v8 API (default; browser User-Agent + cookie/crumb handshake) — with an **Eastmoney push2his fallback channel** selectable via `stock --source eastmoney` (tries secid `105`/`106`/`107` = NASDAQ/NYSE/AMEX)
 - HK stocks: Eastmoney push2his API (direct HTTP)
 - Crypto: Yahoo Finance API (same as US stocks)
 - News: Yahoo Finance + Google News RSS
 - Sentiment: StockTwits + Reddit JSON API
 - China A-shares: Eastmoney APIs (via Rust HTTP)
+
+### Data channel selection (`stock --source`)
+
+`trad-skill stock` auto-selects the channel from the symbol: US/Crypto → Yahoo Finance, A-share/HK → Eastmoney. The `--source` flag overrides this:
+
+| `--source` | US stocks | A-shares | HK stocks | Crypto |
+|---|---|---|---|---|
+| _(omitted, auto)_ | Yahoo | Eastmoney | Eastmoney | Yahoo |
+| `yahoo` | Yahoo | Yahoo (`.SS`/`.SZ`) | Yahoo (`.HK`) | Yahoo |
+| `eastmoney` | Eastmoney (105/106/107) | Eastmoney | Eastmoney | _not supported_ |
+
+Use `--source eastmoney` for US stocks when Yahoo Finance is unreachable in your region (typical symptoms: `Yahoo Finance 错误(...): 未知错误` or HTTP 403 from datacenter/cloud IPs).
