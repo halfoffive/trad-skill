@@ -272,6 +272,10 @@ trad-skill fundamentals --symbol AAPL
 
 # Fetch sentiment (default --limit 15)
 trad-skill sentiment --symbol AAPL --limit 15
+
+# China A-share fundamentals & news auto-route to Eastmoney (no Yahoo required):
+trad-skill fundamentals --symbol 600519
+trad-skill news --symbol 600519
 ```
 
 | Subcommand | Defaults (compact) | Expand flags |
@@ -282,6 +286,8 @@ trad-skill sentiment --symbol AAPL --limit 15
 | `sentiment` | `--limit 15`, 8 messages/posts shown | `--limit N` |
 
 `stock --source` selects the data channel: by default US/Crypto use Yahoo Finance and A-shares/HK use Eastmoney, auto-detected from the symbol. Pass `--source eastmoney` to route US stocks through Eastmoney (handy when Yahoo is region-blocked), or `--source yahoo` to force Yahoo (A-share/HK symbols are mapped to `.SS`/`.SZ`/`.HK`). Eastmoney does not serve crypto.
+
+**When Yahoo Finance is unreachable** (symptom: `未知错误`, `401 Unauthorized`, or `403 Forbidden` from datacenter/cloud IPs): A-share `stock` / `fundamentals` / `news` already use Eastmoney automatically — just pass the 6-digit code. For US price data, add `--source eastmoney`. US `fundamentals` / `news` have no Eastmoney equivalent, so the agent falls back to web search for those parts.
 
 `trad-skill` is the **primary** data source and is tried first. It is not a hard dependency in the sense that, if a subcommand errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts the command could not provide** — it never skips the binary outright.
 
