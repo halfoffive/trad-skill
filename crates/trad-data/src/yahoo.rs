@@ -11,21 +11,6 @@ use reqwest::Client;
 /// 所有 Yahoo 请求必须携带真实浏览器 UA。
 pub const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-/// 简单的 URL 编码（用于 crumb 参数，镜像 news.rs 的同名实现）
-pub fn url_encode(s: &str) -> String {
-    let mut result = String::new();
-    for b in s.as_bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(*b as char);
-            }
-            b' ' => result.push_str("%20"),
-            _ => result.push_str(&format!("%{:02X}", b)),
-        }
-    }
-    result
-}
-
 /// 获取 Yahoo Finance crumb token（yfinance 底层反爬握手）
 ///
 /// 流程：先访问 fc.yahoo.com 种 cookie（cookie store 自动保存），
@@ -60,7 +45,7 @@ pub async fn get_crumb(client: &Client) -> Option<String> {
 /// 给 URL 追加 crumb 查询参数（自动判断分隔符 `?` / `&`）。
 pub fn append_crumb(url: &str, crumb: &str) -> String {
     let sep = if url.contains('?') { "&" } else { "?" };
-    format!("{}{}crumb={}", url, sep, url_encode(crumb))
+    format!("{}{}crumb={}", url, sep, crate::http::url_encode(crumb))
 }
 
 /// 带 crumb 握手的 Yahoo GET，返回响应 body 文本。
@@ -95,14 +80,6 @@ pub async fn yahoo_get_body(client: &Client, url: &str) -> Result<String, String
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_url_encode() {
-        assert_eq!(url_encode("hello world"), "hello%20world");
-        assert_eq!(url_encode("AAPL"), "AAPL");
-        assert_eq!(url_encode("a&b=c"), "a%26b%3Dc");
-        assert_eq!(url_encode("a+b/c"), "a%2Bb%2Fc");
-    }
 
     #[test]
     fn test_append_crumb() {

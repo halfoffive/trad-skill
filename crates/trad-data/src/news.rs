@@ -197,7 +197,7 @@ async fn fetch_google_news(
     lang: &str,
 ) -> String {
     let days = days.max(1);
-    let encoded_query = urlencoding_encode(query);
+    let encoded_query = crate::http::url_encode(query);
     let (hl, gl, ceid) = match lang {
         "zh" => ("zh-CN", "CN", "CN:zh-Hans"),
         _ => ("en", "US", "US:en"),
@@ -219,21 +219,6 @@ async fn fetch_google_news(
 
     // 解析 RSS XML
     parse_google_news_rss(&xml_text, query, days, limit)
-}
-
-/// 简单的 URL 编码
-fn urlencoding_encode(s: &str) -> String {
-    let mut result = String::new();
-    for b in s.as_bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(*b as char);
-            }
-            b' ' => result.push_str("%20"),
-            _ => result.push_str(&format!("%{:02X}", b)),
-        }
-    }
-    result
 }
 
 /// 解析 Google News RSS XML
@@ -334,7 +319,7 @@ async fn fetch_cn_news(client: &Client, symbol: &str, days: u32, limit: u32) -> 
 
     let url = format!(
         "https://search-api-web.eastmoney.com/search/jsonp?cb=jQuery&param={}",
-        urlencoding_encode(&param.to_string())
+        crate::http::url_encode(&param.to_string())
     );
 
     match get_with_retry(client, &url, Some(2)).await {
@@ -490,13 +475,6 @@ mod tests {
         assert_eq!(strip_jsonp("callback(data)"), "data");
         assert_eq!(strip_jsonp("noparens"), "noparens");
         assert_eq!(strip_jsonp(""), "");
-    }
-
-    #[test]
-    fn test_urlencoding_encode() {
-        assert_eq!(urlencoding_encode("hello world"), "hello%20world");
-        assert_eq!(urlencoding_encode("AAPL"), "AAPL");
-        assert_eq!(urlencoding_encode("a&b=c"), "a%26b%3Dc");
     }
 
     #[test]
