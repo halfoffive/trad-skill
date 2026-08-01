@@ -4,6 +4,7 @@
 /// 对齐 Python fetch_fundamentals.py 的输出格式。
 use reqwest::Client;
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::http::get_with_retry;
 use crate::market::{detect_market, Market};
@@ -11,11 +12,26 @@ use crate::yahoo::yahoo_get_body;
 
 // ───────────────────────── 工具函数 ─────────────────────────
 
-/// 格式化数值：缺失返回 "N/A"，否则 round 到 2 位
+/// 格式化数值：缺失返回 "N/A"，否则 round 到 2 位。
+///
+/// Yahoo quoteSummary 的多数指标是 `{"fmt":"466.82B","raw":466822987776}` 对象，
+/// 优先取 `fmt`（已格式化的字符串），否则回退到 `raw` 数值。
 fn fmt_num(v: Option<&Value>) -> String {
     match v {
         None => "N/A".to_string(),
         Some(Value::Null) => "N/A".to_string(),
+        Some(Value::Object(_)) => {
+            // Yahoo {fmt, raw} 对象：优先 fmt，其次 raw
+            if let Some(fmt) = v.and_then(|o| o.get("fmt")).and_then(|f| f.as_str()) {
+                if !fmt.is_empty() {
+                    return fmt.to_string();
+                }
+            }
+            match v.and_then(|o| o.get("raw")) {
+                Some(raw) => fmt_num(Some(raw)),
+                None => "N/A".to_string(),
+            }
+        }
         Some(Value::Number(n)) => {
             if let Some(f) = n.as_f64() {
                 // 大数值（如市值）直接显示原始值，小数保留 2 位
@@ -89,18 +105,6 @@ fn calc_yoy(cur: Option<f64>, prev: Option<f64>) -> String {
     }
 }
 
-/// 从报表数组中按行标签提取数值序列（按年份倒序）
-fn extract_row_values(statements: &[Value], row_label: &str) -> Vec<Option<f64>> {
-    statements
-        .iter()
-        .map(|stmt| {
-            stmt.get(row_label)
-                .and_then(|v| v.get("raw"))
-                .and_then(|r| r.as_f64())
-        })
-        .collect()
-}
-
 // ───────────────────────── 美股基本面 ─────────────────────────
 
 /// 获取美股基本面数据（Yahoo Finance v10 API）
@@ -108,8 +112,8 @@ async fn fetch_us_fundamentals(client: &Client, symbol: &str) -> String {
     let mut sections = Vec::new();
     sections.push(format!("# {} 基本面（精简）\n", symbol));
 
-    // 构建 quoteSummary 请求 URL
-    let modules = "assetProfile,financialData,defaultKeyStats,incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory";
+    // 构建 quoteSummary 请求 URL（公司概况所需模块；财务报表改用 time-series 接口）
+    let modules = "assetProfile,financialData,defaultKeyStats,price,summaryDetail";
     let url = format!(
         "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{}?modules={}",
         symbol, modules
@@ -148,10 +152,26 @@ async fn fetch_us_fundamentals(client: &Client, symbol: &str) -> String {
     sections.push("## 公司概况\n".to_string());
     let profile = result.get("assetProfile").unwrap_or(&Value::Null);
     let fin_data = result.get("financialData").unwrap_or(&Value::Null);
-    let key_stats = result.get("defaultKeyStats").unwrap_or(&Value::Null);
+
+    // 公司名称：longName → price.longName → shortName → symbol 兜底
+    let company_name = {
+        let n = first_available(
+            result,
+            &[
+                ("assetProfile", "longName"),
+                ("price", "longName"),
+                ("assetProfile", "shortName"),
+            ],
+        );
+        if n == "N/A" {
+            symbol.to_string()
+        } else {
+            n
+        }
+    };
 
     let fields = [
-        ("公司名称", fmt_num(profile.get("longName"))),
+        ("公司名称", company_name),
         (
             "行业",
             format!(
@@ -160,9 +180,33 @@ async fn fetch_us_fundamentals(client: &Client, symbol: &str) -> String {
                 fmt_num(profile.get("industry"))
             ),
         ),
-        ("市值", fmt_num(key_stats.get("marketCap"))),
-        ("市盈率(PE)", fmt_num(key_stats.get("trailingPE"))),
-        ("市净率(PB)", fmt_num(key_stats.get("priceToBook"))),
+        (
+            "市值",
+            first_available(
+                result,
+                &[("price", "marketCap"), ("defaultKeyStats", "marketCap")],
+            ),
+        ),
+        (
+            "市盈率(PE)",
+            first_available(
+                result,
+                &[
+                    ("summaryDetail", "trailingPE"),
+                    ("defaultKeyStats", "trailingPE"),
+                ],
+            ),
+        ),
+        (
+            "市净率(PB)",
+            first_available(
+                result,
+                &[
+                    ("defaultKeyStats", "priceToBook"),
+                    ("summaryDetail", "priceToBook"),
+                ],
+            ),
+        ),
         ("ROE", fmt_num(fin_data.get("returnOnEquity"))),
         ("总营收", fmt_num(fin_data.get("totalRevenue"))),
         ("利润率", fmt_num(fin_data.get("profitMargins"))),
@@ -172,167 +216,179 @@ async fn fetch_us_fundamentals(client: &Client, symbol: &str) -> String {
     }
     sections.push(String::new());
 
-    // ── 关键财务指标表 ──
-    let income_stmts = result
-        .get("incomeStatementHistory")
-        .and_then(|v| v.get("incomeStatementHistory"))
-        .and_then(|v| v.as_array());
-    let balance_stmts = result
-        .get("balanceSheetHistory")
-        .and_then(|v| v.get("balanceSheetStatements"))
-        .and_then(|v| v.as_array());
-    let cashflow_stmts = result
-        .get("cashflowStatementHistory")
-        .and_then(|v| v.get("cashflowStatements"))
-        .and_then(|v| v.as_array());
-
-    let has_data = income_stmts.is_some_and(|a| !a.is_empty())
-        || balance_stmts.is_some_and(|a| !a.is_empty())
-        || cashflow_stmts.is_some_and(|a| !a.is_empty());
-
-    if has_data {
-        sections.push("## 关键财务指标（最近年度，脚本抽取）\n".to_string());
-        sections.push(build_us_metric_table(
-            income_stmts,
-            balance_stmts,
-            cashflow_stmts,
-        ));
-    } else {
-        sections.push("## 关键财务指标\n\n> 无数据\n".to_string());
-    }
+    // ── 关键财务指标表（Yahoo fundamentals-timeseries API）──
+    // quoteSummary 的报表模块（incomeStatementHistory 等）常返回空，改用 time-series 接口。
+    sections.push("## 关键财务指标（最近年度）\n".to_string());
+    sections.push(fetch_us_financial_table(client, symbol).await);
 
     sections.join("\n")
 }
 
-/// 构建美股关键财务指标 markdown 表格
-fn build_us_metric_table(
-    income: Option<&Vec<Value>>,
-    balance: Option<&Vec<Value>>,
-    cashflow: Option<&Vec<Value>>,
-) -> String {
-    // 行项映射：(显示名, 数据源类型, 行标签)
-    struct RowDef<'a> {
-        display: &'a str,
-        source: &'a str, // "income" / "balance" / "cashflow"
-        label: &'a str,
-    }
-    let rows = [
-        RowDef {
-            display: "营收",
-            source: "income",
-            label: "totalRevenue",
-        },
-        RowDef {
-            display: "净利润",
-            source: "income",
-            label: "netIncome",
-        },
-        RowDef {
-            display: "摊薄EPS",
-            source: "income",
-            label: "dilutedEPS",
-        },
-        RowDef {
-            display: "毛利",
-            source: "income",
-            label: "grossProfit",
-        },
-        RowDef {
-            display: "总资产",
-            source: "balance",
-            label: "totalAssets",
-        },
-        RowDef {
-            display: "总负债",
-            source: "balance",
-            label: "totalDebt",
-        },
-        RowDef {
-            display: "股东权益",
-            source: "balance",
-            label: "totalStockholderEquity",
-        },
-        RowDef {
-            display: "经营现金流",
-            source: "cashflow",
-            label: "operatingCashFlow",
-        },
-        RowDef {
-            display: "自由现金流",
-            source: "cashflow",
-            label: "freeCashFlow",
-        },
-    ];
-
-    // 收集年份标签（取最近 4 年）
-    let mut year_labels = Vec::new();
-    for stmts in [income, balance, cashflow].iter().flatten() {
-        for stmt in *stmts {
-            if let Some(end_date) = stmt
-                .get("endDate")
-                .and_then(|v| v.get("fmt"))
-                .and_then(|v| v.as_str())
-            {
-                let label = end_date.get(..4).unwrap_or(end_date).to_string();
-                if !year_labels.contains(&label) {
-                    year_labels.push(label);
+/// 依次尝试多个 (section, key)，返回第一个非空且非 "N/A" 的格式化值。
+fn first_available(result: &Value, paths: &[(&str, &str)]) -> String {
+    for (section, key) in paths {
+        if let Some(val) = result.get(section).and_then(|s| s.get(key)) {
+            if !val.is_null() {
+                let formatted = fmt_num(Some(val));
+                if formatted != "N/A" {
+                    return formatted;
                 }
             }
-            if year_labels.len() >= 4 {
-                break;
+        }
+    }
+    "N/A".to_string()
+}
+
+/// 美股年度财务指标表（Yahoo fundamentals-timeseries API）。
+///
+/// quoteSummary 的报表模块（incomeStatementHistory / balanceSheetHistory /
+/// cashflowStatementHistory）现已常返回空数组，改用 yfinance 同款的
+/// fundamentals-timeseries 接口按年度取数。同样需要 crumb 握手。
+async fn fetch_us_financial_table(client: &Client, symbol: &str) -> String {
+    // 指标：(显示名, time-series 年度类型)
+    let metrics: [(&str, &str); 9] = [
+        ("营收", "annualTotalRevenue"),
+        ("净利润", "annualNetIncome"),
+        ("摊薄EPS", "annualDilutedEPS"),
+        ("毛利", "annualGrossProfit"),
+        ("总资产", "annualTotalAssets"),
+        ("总负债", "annualTotalDebt"),
+        ("股东权益", "annualStockholdersEquity"),
+        ("经营现金流", "annualOperatingCashFlow"),
+        ("自由现金流", "annualFreeCashFlow"),
+    ];
+    let types: Vec<&str> = metrics.iter().map(|(_, t)| *t).collect();
+
+    let now = chrono::Utc::now();
+    let period2 = now.timestamp();
+    let period1 = (now - chrono::Duration::days(365 * 5)).timestamp();
+    let url = format!(
+        "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{}?symbol={}&type={}&period1={}&period2={}",
+        symbol,
+        symbol,
+        types.join(","),
+        period1,
+        period2
+    );
+
+    let resp_text = match yahoo_get_body(client, &url).await {
+        Ok(b) => b,
+        Err(e) => return format!("> 财务指标获取失败: {}\n", e),
+    };
+    let body: Value = match serde_json::from_str(&resp_text) {
+        Ok(v) => v,
+        Err(e) => return format!("> 财务指标解析失败: {}\n", e),
+    };
+
+    build_us_timeseries_table(&body, &metrics)
+}
+
+/// 解析 fundamentals-timeseries 响应为按年表格。
+///
+/// 响应结构：`timeseries.result[]` 每项含 `meta.type[0]`、`timestamp[]`，
+/// 以及以类型名为键的数组（元素为 `{reportedValue:{raw,fmt}}` 或 null）。
+fn build_us_timeseries_table(body: &Value, metrics: &[(&str, &str)]) -> String {
+    let results = body
+        .get("timeseries")
+        .and_then(|t| t.get("result"))
+        .and_then(|r| r.as_array());
+    let results = match results {
+        Some(r) if !r.is_empty() => r,
+        _ => return "> 无年度财务数据\n".to_string(),
+    };
+
+    // 类型名 → { 年份 → (raw, fmt) }
+    let mut by_type: HashMap<String, HashMap<i64, (Option<f64>, String)>> = HashMap::new();
+    let mut years: Vec<i64> = Vec::new();
+
+    for entry in results {
+        let type_name = entry
+            .get("meta")
+            .and_then(|m| m.get("type"))
+            .and_then(|t| t.as_array())
+            .and_then(|a| a.first())
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if type_name.is_empty() {
+            continue;
+        }
+        let (Some(ts_arr), Some(val_arr)) = (
+            entry.get("timestamp").and_then(|t| t.as_array()),
+            entry.get(&type_name).and_then(|v| v.as_array()),
+        ) else {
+            continue;
+        };
+
+        let mut year_map: HashMap<i64, (Option<f64>, String)> = HashMap::new();
+        for (ts, val) in ts_arr.iter().zip(val_arr.iter()) {
+            let Some(sec) = ts.as_i64() else { continue };
+            let Some(dt) = chrono::DateTime::from_timestamp(sec, 0) else {
+                continue;
+            };
+            let Ok(y) = dt.format("%Y").to_string().parse::<i64>() else {
+                continue;
+            };
+            let reported = val.get("reportedValue");
+            let raw = reported.and_then(|r| r.get("raw")).and_then(|r| r.as_f64());
+            let fmt = reported
+                .and_then(|r| r.get("fmt"))
+                .and_then(|f| f.as_str())
+                .unwrap_or("")
+                .to_string();
+            if !years.contains(&y) {
+                years.push(y);
             }
+            year_map.insert(y, (raw, fmt));
         }
-        if year_labels.len() >= 4 {
-            break;
-        }
-    }
-    year_labels.truncate(4);
-
-    if year_labels.is_empty() {
-        return "> 无可用年度数据\n".to_string();
+        by_type.insert(type_name, year_map);
     }
 
-    let ncols = year_labels.len();
+    years.sort_unstable();
+    years.reverse();
+    years.truncate(4);
+    if years.is_empty() {
+        return "> 无年度财务数据\n".to_string();
+    }
 
-    // 表头
+    let ncols = years.len();
+    let year_labels: Vec<String> = years.iter().map(|y| y.to_string()).collect();
+
     let mut lines = Vec::new();
-    let header = format!("| 指标 | {} | YoY(营收/净利) |", year_labels.join(" | "));
-    lines.push(header);
+    lines.push(format!(
+        "| 指标 | {} | YoY(营收/净利) |",
+        year_labels.join(" | ")
+    ));
     lines.push(format!("|{}|", "---|".repeat(ncols + 2)));
 
-    // 提取各行的数值
-    for row_def in &rows {
-        let stmts = match row_def.source {
-            "income" => income,
-            "balance" => balance,
-            "cashflow" => cashflow,
-            _ => None,
-        };
-        let vals = if let Some(stmts) = stmts {
-            extract_row_values(stmts, row_def.label)
-        } else {
-            vec![None; ncols]
-        };
-
-        let mut cells = vec![row_def.display.to_string()];
-        for i in 0..ncols {
-            let cell = vals.get(i).copied().flatten();
-            cells.push(match cell {
-                Some(v) => format!("{:.2}", v),
-                None => "N/A".to_string(),
-            });
+    for (display, type_name) in metrics {
+        let year_map = by_type.get(*type_name);
+        let mut cells = vec![display.to_string()];
+        let mut raws: Vec<Option<f64>> = Vec::new();
+        for y in &years {
+            let (raw, fmt) = year_map
+                .and_then(|m| m.get(y))
+                .map(|(r, f)| (*r, f.clone()))
+                .unwrap_or((None, String::new()));
+            raws.push(raw);
+            let cell = if !fmt.is_empty() {
+                fmt
+            } else if let Some(r) = raw {
+                format!("{:.2}", r)
+            } else {
+                "N/A".to_string()
+            };
+            cells.push(cell);
         }
-
-        // YoY 仅对营收和净利润计算
-        let yoy = if row_def.display == "营收" || row_def.display == "净利润" {
-            let cur = vals.first().copied().flatten();
-            let prev = vals.get(1).copied().flatten();
+        // YoY 仅对营收和净利润
+        let yoy = if *display == "营收" || *display == "净利润" {
+            let cur = raws.first().copied().flatten();
+            let prev = raws.get(1).copied().flatten();
             calc_yoy(cur, prev)
         } else {
             String::new()
         };
         cells.push(yoy);
-
         lines.push(format!("| {} |", cells.join(" | ")));
     }
 
@@ -569,5 +625,73 @@ mod tests {
         assert!(table.contains("272.43亿"), "PARENTNETPROFIT 净利润");
         // 不应再出现整行 N/A（旧错误字段名导致）
         assert!(!table.contains("| 每股收益 | N/A |"));
+    }
+
+    // fmt_num 需解包 Yahoo 的 {fmt, raw} 对象（修复打印原始 JSON 的 bug）。
+    #[test]
+    fn test_fmt_num_object() {
+        use serde_json::json;
+        // 优先取 fmt
+        assert_eq!(
+            fmt_num(Some(&json!({"fmt":"466.82B","raw":466822987776.0}))),
+            "466.82B"
+        );
+        assert_eq!(
+            fmt_num(Some(&json!({"fmt":"148.75%","raw":1.4875}))),
+            "148.75%"
+        );
+        // 仅 raw → 格式化数值
+        assert_eq!(fmt_num(Some(&json!({"raw":1234.5}))), "1234.50");
+        // 空对象 → N/A
+        assert_eq!(fmt_num(Some(&json!({}))), "N/A");
+        // 普通数值/字符串不受影响
+        assert_eq!(fmt_num(Some(&json!(1.23456))), "1.23");
+        assert_eq!(fmt_num(Some(&json!("Technology"))), "Technology");
+        assert_eq!(fmt_num(Some(&Value::Null)), "N/A");
+    }
+
+    // 验证 fundamentals-timeseries 响应解析为按年表格（替换空的 quoteSummary 报表模块）。
+    #[test]
+    fn test_build_us_timeseries_table() {
+        use serde_json::json;
+        let body = json!({
+            "timeseries": {
+                "result": [
+                    {
+                        "meta": {"symbol":["AAPL"],"type":["annualTotalRevenue"]},
+                        "timestamp": [1664496000, 1696032000],
+                        "annualTotalRevenue": [
+                            {"reportedValue":{"raw":394328000000.0,"fmt":"394.33B"}},
+                            {"reportedValue":{"raw":383285000000.0,"fmt":"383.29B"}}
+                        ]
+                    },
+                    {
+                        "meta": {"symbol":["AAPL"],"type":["annualNetIncome"]},
+                        "timestamp": [1664496000, 1696032000],
+                        "annualNetIncome": [
+                            {"reportedValue":{"raw":99803000000.0,"fmt":"99.80B"}},
+                            {"reportedValue":{"raw":96995000000.0,"fmt":"97.00B"}}
+                        ]
+                    }
+                ],
+                "error": null
+            }
+        });
+        let metrics = [
+            ("营收", "annualTotalRevenue"),
+            ("净利润", "annualNetIncome"),
+        ];
+        let table = build_us_timeseries_table(&body, &metrics);
+        // 年份降序
+        assert!(table.contains("2023"), "应含 2023 列");
+        assert!(table.contains("2022"), "应含 2022 列");
+        // fmt 值
+        assert!(table.contains("383.29B"), "营收 2023");
+        assert!(table.contains("394.33B"), "营收 2022");
+        assert!(table.contains("97.00B"), "净利润 2023");
+        // 营收 YoY
+        assert!(table.contains("-2.80%"), "营收 YoY");
+        // 无 N/A
+        assert!(!table.contains("N/A"), "不应有 N/A: {}", table);
     }
 }
