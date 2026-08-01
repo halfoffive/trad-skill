@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.8.5] - 2026-08-01
 
 ### Fixed
 
@@ -18,6 +18,13 @@ All notable changes to this project will be documented in this file.
 - **`url_encode` 去重**：`yahoo.rs::url_encode` 与 `news.rs::urlencoding_encode` 逐字节相同，合并为 `http::url_encode` 单一实现。
 - **`fetch_news` 去除冗余 clone**：重构双源失败分支，避免 `yf_news.clone()`。
 - **`fmt_val` 注释**：说明显式 `(v*10000).round()` 强制四舍五入（远离零），与 `{:.4}` 的银行家舍入在末位 5 时不同，勿简化。
+- HTTP user-agent 更新为 `trad-skill/1.8.5`。
+
+### Notes
+
+- `package.json` `version`: `1.8.4` -> `1.8.5`（+ 5 个 `optionalDependencies` `@trad-skill/*` pin）。
+- `crates/trad-data/Cargo.toml` `version`: `1.8.4` -> `1.8.5`。
+- 5 个 `npm/<platform>/package.json` `version`: `1.8.4` -> `1.8.5`。
 
 ## [1.8.4] - 2026-08-01
 
