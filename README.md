@@ -273,9 +273,13 @@ trad-skill fundamentals --symbol AAPL
 # Fetch sentiment (default --limit 15)
 trad-skill sentiment --symbol AAPL --limit 15
 
-# China A-share fundamentals & news auto-route to Eastmoney (no Yahoo required):
+# China A-share & HK fundamentals/news auto-route to Eastmoney (no Yahoo required):
 trad-skill fundamentals --symbol 600519
 trad-skill news --symbol 600519
+trad-skill stock --symbol 0700.HK        # HK OHLCV via Eastmoney
+trad-skill news --symbol 0700.HK         # HK news via Eastmoney
+# HK sentiment is not supported (StockTwits/Reddit are US-only; Eastmoney
+# 千股千评 does not cover HK) — use the US-listed ticker if available.
 ```
 
 | Subcommand | Defaults (compact) | Expand flags |
