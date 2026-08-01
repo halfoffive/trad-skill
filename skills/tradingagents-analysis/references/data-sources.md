@@ -131,7 +131,7 @@ Data fetching is implemented in Rust (`trad-skill` binary) for all markets inclu
 - US stocks: Yahoo Finance v8 API (default; browser User-Agent + cookie/crumb handshake) — with an **Eastmoney push2his fallback channel** selectable via `stock --source eastmoney` (tries secid `105`/`106`/`107` = NASDAQ/NYSE/AMEX)
 - HK stocks: Eastmoney push2his API (direct HTTP)
 - Crypto: Yahoo Finance API (same as US stocks)
-- Fundamentals: Yahoo Finance quoteSummary v10 (browser UA + cookie/crumb handshake) for US/HK/Crypto; **Eastmoney** push2 + datacenter for A-shares
+- Fundamentals: Yahoo Finance quoteSummary v10 (browser UA + cookie/crumb handshake) for US/Crypto; **Eastmoney** push2 + datacenter for A-shares **and HK stocks** (secid `116.{code}`; financial-indicator table gracefully degrades to "暂不可用" if Eastmoney has no HK rows)
 - News: Yahoo Finance quoteSummary v10 (browser UA + cookie/crumb handshake) + Google News RSS in parallel (US); Eastmoney/Google News (CN)
 - Sentiment: StockTwits + Reddit JSON API
 - China A-shares: Eastmoney APIs (via Rust HTTP) — stock, fundamentals, and news all auto-route here, no Yahoo dependency

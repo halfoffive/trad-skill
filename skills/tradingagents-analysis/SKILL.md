@@ -243,6 +243,8 @@ The `trad-skill` Rust binary lives in this skill's `bin/<platform>/` directory. 
 > **Data channel (`--source yahoo|eastmoney`)**: `stock` auto-selects the channel from the symbol (US/Crypto → Yahoo Finance, A-share/HK → Eastmoney). Pass `--source eastmoney` to route US stocks through Eastmoney when Yahoo Finance is region-blocked (symptom: `未知错误` or HTTP 403), or `--source yahoo` to force Yahoo (A-share/HK symbols are mapped to `.SS`/`.SZ`/`.HK`). Eastmoney does not serve crypto.
 >
 > **A股优先东方财富；Yahoo 不可达时的回退**: A股的 `stock` / `fundamentals` / `news` 全部自动走东方财富（不依赖 Yahoo），直接用 6 位代码即可——A股分析应首选东方财富源。当 Yahoo Finance 不可达（症状：`未知错误` / `401 Unauthorized` / `403 Forbidden`，常见于数据中心/云 IP）时：美股行情改用 `stock --source eastmoney`；美股 `fundamentals` / `news` 没有东方财富对应源，**仅对这两部分**回退到网络搜索/浏览器工具，其余子命令仍走 `trad-skill`。
+>
+> **港股 fundamentals 自动走东方财富**: 港股（`0700.HK`、`09988` 等）的 `fundamentals` 子命令自动路由到东方财富（secid `116.{code}`），无需 `--source` 参数，与 A股行为一致。Yahoo Finance 不可达时港股基本面不受影响；若东方财富 datacenter 无对应财务指标行，基本面报告仍会输出个股基本信息，财务指标表优雅降级为「暂不可用」。
 
 For the full catalog of data sources, APIs, and fallback strategies, see `references/data-sources.md`.
 

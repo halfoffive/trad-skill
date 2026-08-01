@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **港股 `fundamentals` Yahoo 403**：`fetch_fundamentals` 此前将 `Market::HKStock` 路由到 Yahoo（数据中心/云 IP 常返回 403）。现提取共享 `fetch_eastmoney_fundamentals` helper（`EastmoneyParams` struct），新增 `fetch_hk_fundamentals`（secid `116.{code}`），港股基本面自动走东方财富，与 A股行为一致；若 datacenter 无港股财务指标行，财务表优雅降级为「暂不可用」，个股基本信息仍正常输出。
+
 ## [1.8.3] - 2026-08-01
 
 ### Fixed
