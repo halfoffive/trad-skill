@@ -297,7 +297,13 @@ fn parse_google_news_rss(xml: &str, query: &str, days: u32, limit: u32) -> Strin
 
 /// 通过东方财富搜索 API 获取A股/港股新闻。
 /// `code` 为搜索关键字（A股=6位代码，港股=5位零填充代码），`tag` 用于标题与降级查询（"A股"/"港股"）。
-async fn fetch_eastmoney_news(client: &Client, code: &str, days: u32, limit: u32, tag: &str) -> String {
+async fn fetch_eastmoney_news(
+    client: &Client,
+    code: &str,
+    days: u32,
+    limit: u32,
+    tag: &str,
+) -> String {
     // 东方财富搜索 API（JSONP 格式）
     let param = serde_json::json!({
         "uid": "",
@@ -386,8 +392,12 @@ async fn fetch_eastmoney_news(client: &Client, code: &str, days: u32, limit: u32
                     }
 
                     if !results.is_empty() {
-                        let header =
-                            format!("## {} {} 相关新闻（共 {} 条）\n\n", tag, code, results.len());
+                        let header = format!(
+                            "## {} {} 相关新闻（共 {} 条）\n\n",
+                            tag,
+                            code,
+                            results.len()
+                        );
                         return format!("{}{}", header, results.join("\n"));
                     }
                 }
