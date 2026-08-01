@@ -197,7 +197,7 @@ async fn fetch_google_news(
     lang: &str,
 ) -> String {
     let days = days.max(1);
-    let encoded_query = urlencoding_encode(query);
+    let encoded_query = crate::http::url_encode(query);
     let (hl, gl, ceid) = match lang {
         "zh" => ("zh-CN", "CN", "CN:zh-Hans"),
         _ => ("en", "US", "US:en"),
@@ -219,21 +219,6 @@ async fn fetch_google_news(
 
     // 解析 RSS XML
     parse_google_news_rss(&xml_text, query, days, limit)
-}
-
-/// 简单的 URL 编码
-fn urlencoding_encode(s: &str) -> String {
-    let mut result = String::new();
-    for b in s.as_bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(*b as char);
-            }
-            b' ' => result.push_str("%20"),
-            _ => result.push_str(&format!("%{:02X}", b)),
-        }
-    }
-    result
 }
 
 /// 解析 Google News RSS XML
@@ -310,12 +295,19 @@ fn parse_google_news_rss(xml: &str, query: &str, days: u32, limit: u32) -> Strin
 
 // ───────────────────────── A股新闻（东方财富）─────────────────────────
 
-/// 通过东方财富搜索 API 获取A股新闻
-async fn fetch_cn_news(client: &Client, symbol: &str, days: u32, limit: u32) -> String {
+/// 通过东方财富搜索 API 获取A股/港股新闻。
+/// `code` 为搜索关键字（A股=6位代码，港股=5位零填充代码），`tag` 用于标题与降级查询（"A股"/"港股"）。
+async fn fetch_eastmoney_news(
+    client: &Client,
+    code: &str,
+    days: u32,
+    limit: u32,
+    tag: &str,
+) -> String {
     // 东方财富搜索 API（JSONP 格式）
     let param = serde_json::json!({
         "uid": "",
-        "keyword": symbol,
+        "keyword": code,
         "type": ["cmsArticleWebOld"],
         "client": "web",
         "clientType": "web",
@@ -334,7 +326,7 @@ async fn fetch_cn_news(client: &Client, symbol: &str, days: u32, limit: u32) -> 
 
     let url = format!(
         "https://search-api-web.eastmoney.com/search/jsonp?cb=jQuery&param={}",
-        urlencoding_encode(&param.to_string())
+        crate::http::url_encode(&param.to_string())
     );
 
     match get_with_retry(client, &url, Some(2)).await {
@@ -345,7 +337,7 @@ async fn fetch_cn_news(client: &Client, symbol: &str, days: u32, limit: u32) -> 
                     // 降级到 Google News 中文
                     return fetch_google_news(
                         client,
-                        &format!("{} A股", symbol),
+                        &format!("{} {}", code, tag),
                         days,
                         limit,
                         "zh",
@@ -361,7 +353,7 @@ async fn fetch_cn_news(client: &Client, symbol: &str, days: u32, limit: u32) -> 
                 Err(_) => {
                     return fetch_google_news(
                         client,
-                        &format!("{} A股", symbol),
+                        &format!("{} {}", code, tag),
                         days,
                         limit,
                         "zh",
@@ -400,19 +392,23 @@ async fn fetch_cn_news(client: &Client, symbol: &str, days: u32, limit: u32) -> 
                     }
 
                     if !results.is_empty() {
-                        let header =
-                            format!("## A股 {} 相关新闻（共 {} 条）\n\n", symbol, results.len());
+                        let header = format!(
+                            "## {} {} 相关新闻（共 {} 条）\n\n",
+                            tag,
+                            code,
+                            results.len()
+                        );
                         return format!("{}{}", header, results.join("\n"));
                     }
                 }
             }
 
             // 东方财富无结果，降级到 Google News 中文
-            fetch_google_news(client, &format!("{} A股", symbol), days, limit, "zh").await
+            fetch_google_news(client, &format!("{} {}", code, tag), days, limit, "zh").await
         }
         Err(_) => {
             // 降级到 Google News 中文
-            fetch_google_news(client, &format!("{} A股", symbol), days, limit, "zh").await
+            fetch_google_news(client, &format!("{} {}", code, tag), days, limit, "zh").await
         }
     }
 }
@@ -435,6 +431,7 @@ fn strip_jsonp(text: &str) -> String {
 ///
 /// 自动检测市场类型：
 /// - A股（6位纯数字）→ 东方财富新闻，失败降级 Google News 中文
+/// - 港股（.HK / 5位数字）→ 东方财富新闻（5位代码），失败降级 Google News 中文
 /// - 其他 → Yahoo Finance 新闻 + Google News，并行获取后合并输出
 ///
 /// 契约：永不 panic，错误以字符串形式返回
@@ -446,27 +443,33 @@ pub async fn fetch_news(client: &Client, symbol: &str, days: u32, limit: u32) ->
 
     let market = detect_market(symbol);
     match market {
-        Market::CNStock => fetch_cn_news(client, symbol, days, limit).await,
+        Market::CNStock => fetch_eastmoney_news(client, symbol, days, limit, "A股").await,
+        Market::HKStock => {
+            // 港股用 5 位零填充代码作为东方财富搜索关键字
+            let code = crate::market::hk_eastmoney_code(symbol);
+            fetch_eastmoney_news(client, &code, days, limit, "港股").await
+        }
         _ => {
-            // 非A股：并行获取 Yahoo Finance + Google News
+            // 美股/加密：并行获取 Yahoo Finance + Google News
             let (yf_news, google_news) = tokio::join!(
                 fetch_yfinance_news(client, symbol, days, limit),
                 fetch_google_news(client, symbol, days, limit, "en")
             );
 
-            let mut sections = Vec::new();
-            if !yf_news.starts_with("错误") {
-                sections.push(yf_news.clone());
+            let yf_ok = !yf_news.starts_with("错误");
+            let g_ok = !google_news.starts_with("错误");
+            if !yf_ok && !g_ok {
+                // 两个源都失败：返回 Yahoo 的错误信息
+                return yf_news;
             }
-            if !google_news.starts_with("错误") {
+            let mut sections = Vec::new();
+            if yf_ok {
+                sections.push(yf_news);
+            }
+            if g_ok {
                 sections.push(google_news);
             }
-
-            if sections.is_empty() {
-                yf_news
-            } else {
-                sections.join("\n---\n\n")
-            }
+            sections.join("\n---\n\n")
         }
     }
 }
@@ -490,13 +493,6 @@ mod tests {
         assert_eq!(strip_jsonp("callback(data)"), "data");
         assert_eq!(strip_jsonp("noparens"), "noparens");
         assert_eq!(strip_jsonp(""), "");
-    }
-
-    #[test]
-    fn test_urlencoding_encode() {
-        assert_eq!(urlencoding_encode("hello world"), "hello%20world");
-        assert_eq!(urlencoding_encode("AAPL"), "AAPL");
-        assert_eq!(urlencoding_encode("a&b=c"), "a%26b%3Dc");
     }
 
     #[test]

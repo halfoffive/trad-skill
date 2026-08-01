@@ -273,6 +273,11 @@ pub fn run(args: InstallArgs) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// 这些测试会写进程级 HOME/USERPROFILE 环境变量；cargo 默认并行跑测试，
+    /// 用此锁串行化所有改环境变量的测试，避免互相覆盖导致偶发失败。
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     /// 跨平台设置 home（HOME + USERPROFILE），返回临时 home 路径
     fn set_home(tmp: &Path) {
@@ -294,6 +299,7 @@ mod tests {
 
     #[test]
     fn agent_dir_mapping() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let tmp = std::env::temp_dir().join("trad-skill-install-test-agentdir");
         std::fs::remove_dir_all(&tmp).ok();
         std::fs::create_dir_all(&tmp).unwrap();
@@ -315,6 +321,7 @@ mod tests {
 
     #[test]
     fn default_target_is_agents() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let tmp = std::env::temp_dir().join("trad-skill-install-test-default");
         std::fs::remove_dir_all(&tmp).ok();
         std::fs::create_dir_all(&tmp).unwrap();
@@ -334,6 +341,7 @@ mod tests {
 
     #[test]
     fn expand_tilde_basic() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let tmp = std::env::temp_dir().join("trad-skill-install-test-tilde");
         std::fs::remove_dir_all(&tmp).ok();
         std::fs::create_dir_all(&tmp).unwrap();

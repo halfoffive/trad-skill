@@ -136,6 +136,21 @@ fn hk_to_yahoo_symbol(symbol: &str) -> String {
     format!("{:0>4}.HK", core)
 }
 
+/// 港股代码 → 东方财富 5 位 secid 数字部分。
+///
+/// 去 `.HK`/`.hk` 后缀，前导零补足 5 位（`0700.HK` → `00700`，`9988.HK` → `09988`，
+/// `09988` → `09988`）。东方财富港股端点（push2his 行情、push2 基本信息、datacenter
+/// 财务/情绪）一律要求 5 位零填充代码；4 位或带后缀的 secid 会返回 `data:null`。
+pub fn hk_eastmoney_code(symbol: &str) -> String {
+    let s = symbol.trim();
+    let digits = s
+        .strip_suffix(".HK")
+        .or_else(|| s.strip_suffix(".hk"))
+        .unwrap_or(s)
+        .trim();
+    format!("{:0>5}", digits)
+}
+
 /// 美股在东方财富的 secid 候选（按常见度排序）：105=NASDAQ, 106=NYSE, 107=AMEX。
 /// 无交易所映射时由 us_em 依次尝试。
 fn us_eastmoney_secids(symbol: &str) -> Vec<String> {
@@ -294,6 +309,22 @@ mod tests {
         assert_eq!(hk_to_yahoo_symbol("00700.HK"), "0700.HK");
         assert_eq!(hk_to_yahoo_symbol("09988"), "9988.HK");
         assert_eq!(hk_to_yahoo_symbol("9988.HK"), "9988.HK");
+    }
+
+    #[test]
+    fn test_hk_eastmoney_code() {
+        // 文档主用例：4 位 + .HK 后缀 -> 5 位零填充
+        assert_eq!(hk_eastmoney_code("0700.HK"), "00700");
+        assert_eq!(hk_eastmoney_code("9988.HK"), "09988");
+        // 5 位 + .HK 后缀：保持 5 位
+        assert_eq!(hk_eastmoney_code("00700.HK"), "00700");
+        // 小写后缀
+        assert_eq!(hk_eastmoney_code("0700.hk"), "00700");
+        // 无后缀：4 位补零，5 位保持
+        assert_eq!(hk_eastmoney_code("0700"), "00700");
+        assert_eq!(hk_eastmoney_code("09988"), "09988");
+        // 带空白
+        assert_eq!(hk_eastmoney_code(" 9988.HK "), "09988");
     }
 
     #[test]

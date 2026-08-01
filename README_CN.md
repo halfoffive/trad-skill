@@ -281,9 +281,13 @@ trad-skill fundamentals --symbol AAPL
 # 获取情绪数据（默认 --limit 15）
 trad-skill sentiment --symbol AAPL --limit 15
 
-# A股基本面/新闻自动走东方财富（无需 Yahoo）：
+# A股/港股 基本面/新闻自动走东方财富（无需 Yahoo）：
 trad-skill fundamentals --symbol 600519
 trad-skill news --symbol 600519
+trad-skill stock --symbol 0700.HK        # 港股行情走东方财富
+trad-skill news --symbol 0700.HK         # 港股新闻走东方财富
+# 港股情绪暂不支持（StockTwits/Reddit 仅覆盖美股；东方财富千股千评未覆盖港股），
+# 如有美股对应代码（如 BABA）可用该代码查询情绪。
 ```
 
 | 子命令 | 默认值（紧凑） | 扩展参数 |

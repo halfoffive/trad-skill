@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **港股 `stock`/`fundamentals` 对 `.HK` 代码失效**：东方财富港股端点（push2his 行情、push2 基本信息、datacenter 财务）要求 5 位零填充 secid（如 `116.00700`）。`market/hk.rs` 此前直接拼 `secid=116.{symbol}`（`0700.HK` -> `116.0700.HK`），`fundamentals.rs` 虽去 `.HK` 但未补零（`0700.HK` -> `116.0700`），二者均返回 `data:null`，导致文档主用例 `0700.HK`/`9988.HK` 静默失败（仅 5 位无后缀形式 `09988` 可用）。新增共享 `market::hk_eastmoney_code()`（去 `.HK` + 补零到 5 位），`hk.rs`（secid）与 `fundamentals.rs`（secid + datacenter_code）统一使用。
+- **港股 `news` 落到美股分支**：`fetch_news` 此前仅特判 A股，港股走 Yahoo + Google（美股导向）。现 `Market::HKStock` 走东方财富文章搜索（5 位代码），返回相关港股新闻（实测 `00700` 命中数百条）。
+- **港股 `sentiment` 发起无效请求**：StockTwits/Reddit 仅覆盖美股、东方财富千股千评/机构参与度未覆盖港股（实测均返回「返回数据为空」），原代码仍并行请求并输出两段「数据源不可用」。现港股直接返回明确「暂不支持」提示，避免 4 次无效请求。
+- **`http` 重试丢弃错误响应体**：非成功响应未读取即 drop，底层连接无法复用。现读取并丢弃响应体后再重试，连接归还连接池。
+- **install 测试并行竞态**：`agent_dir_mapping`/`default_target_is_agents`/`expand_tilde_basic` 写进程级 `HOME`/`USERPROFILE`，cargo 并行测试时互相覆盖偶发失败。以 `std::sync::Mutex` 串行化这三个测试。
+
+### Changed
+
+- **港股 OHLCV URL 传 `beg`/`end`**：原 `end=20500000&lmt=1000000` 拉全量历史再客户端过滤，现服务端按日期过滤（保留客户端过滤兜底）以减少传输；并切换到规范主机 `push2his.eastmoney.com`（与其他东方财富模块一致）。
+- **`url_encode` 去重**：`yahoo.rs::url_encode` 与 `news.rs::urlencoding_encode` 逐字节相同，合并为 `http::url_encode` 单一实现。
+- **`fetch_news` 去除冗余 clone**：重构双源失败分支，避免 `yf_news.clone()`。
+- **`fmt_val` 注释**：说明显式 `(v*10000).round()` 强制四舍五入（远离零），与 `{:.4}` 的银行家舍入在末位 5 时不同，勿简化。
+
 ## [1.8.4] - 2026-08-01
 
 ### Fixed

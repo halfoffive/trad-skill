@@ -5,7 +5,11 @@ use crate::market::OhlcvRow;
 // 严格对齐 Python `compute_indicators()` (fetch_stock_data.py 第62-223行)
 // 所有边缘情况处理与 Python 一致。
 
-/// 格式化数值：round 到 4 位小数，非有限浮点数返回 "N/A"
+/// 格式化数值：round 到 4 位小数，非有限浮点数返回 "N/A"。
+///
+/// 显式 `(v * 10000).round()` 强制「四舍五入（远离零）」；单独 `format!("{:.4}", v)`
+/// 走的是银行家舍入（round-half-to-even），在末位恰好为 5 时结果会不同。保留显式
+/// round 以维持当前输出，切勿简化为直接 `{:.4}`。
 fn fmt_val(v: f64) -> String {
     if v.is_finite() {
         format!("{:.4}", (v * 10000.0).round() / 10000.0)
