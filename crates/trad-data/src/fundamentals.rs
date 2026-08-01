@@ -395,19 +395,40 @@ fn build_us_timeseries_table(body: &Value, metrics: &[(&str, &str)]) -> String {
     lines.join("\n") + "\n"
 }
 
-// ───────────────────────── A股基本面 ─────────────────────────
+// ───────────────────────── 东方财富基本面（A股/港股共享） ─────────────────────────
 
-/// 获取A股基本面数据（东方财富 API）
-async fn fetch_cn_fundamentals(client: &Client, symbol: &str) -> String {
+/// 去掉港股 `.HK`/`.hk` 后缀，保留前导零（如 0700.HK → 0700，09988 → 09988）。
+fn strip_hk_suffix(symbol: &str) -> String {
+    let s = symbol.trim();
+    s.strip_suffix(".HK")
+        .or_else(|| s.strip_suffix(".hk"))
+        .unwrap_or(s)
+        .to_string()
+}
+
+/// 东方财富基本面请求参数（A股/港股共享）。
+struct EastmoneyParams {
+    /// 标题中展示的代码（用户原始输入，如 600519 / 0700.HK）
+    display_symbol: String,
+    /// push2 API secid（如 1.600519 / 116.0700）
+    secid: String,
+    /// datacenter SECURITY_CODE 过滤值（A股=代码，港股=去 .HK 后缀）
+    datacenter_code: String,
+    /// 标题市场标签（"A股基本面" / "港股基本面"）
+    title: String,
+}
+
+/// 东方财富基本面（A股/港股共享）：push2 个股基本信息 + datacenter 财务指标。
+///
+/// datacenter 若无对应市场数据，优雅降级为「财务指标数据暂不可用」。
+async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> String {
     let mut sections = Vec::new();
-    sections.push(format!("# {} A股基本面（精简）\n", symbol));
+    sections.push(format!("# {} {}（精简）\n", p.display_symbol, p.title));
 
     // ── 个股基本信息（东方财富 push2 API）──
-    let market_id = if symbol.starts_with('6') { "1" } else { "0" };
-    let secid = format!("{}.{}", market_id, symbol);
     let info_url = format!(
         "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&invt=2&fields=f57,f58,f84,f85,f127,f116,f117,f189,f43&secid={}",
-        secid
+        p.secid
     );
 
     let mut has_info = false;
@@ -443,7 +464,7 @@ async fn fetch_cn_fundamentals(client: &Client, symbol: &str) -> String {
     // ── 财务分析指标（东方财富 datacenter API）──
     let fin_url = format!(
         "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_F10_FINANCE_MAINFINADATA&filter=(SECURITY_CODE=%22{}%22)&columns=ALL&pageSize=4&sortColumns=REPORT_DATE&sortTypes=-1",
-        symbol
+        p.datacenter_code
     );
 
     match get_with_retry(client, &fin_url, Some(2)).await {
@@ -474,6 +495,36 @@ async fn fetch_cn_fundamentals(client: &Client, symbol: &str) -> String {
     }
 
     sections.join("\n")
+}
+
+/// 获取A股基本面数据（东方财富 API）
+async fn fetch_cn_fundamentals(client: &Client, symbol: &str) -> String {
+    let market_id = if symbol.starts_with('6') { "1" } else { "0" };
+    fetch_eastmoney_fundamentals(
+        client,
+        &EastmoneyParams {
+            display_symbol: symbol.to_string(),
+            secid: format!("{}.{}", market_id, symbol),
+            datacenter_code: symbol.to_string(),
+            title: "A股基本面".to_string(),
+        },
+    )
+    .await
+}
+
+/// 获取港股基本面数据（东方财富 API，secid 前缀 116）
+async fn fetch_hk_fundamentals(client: &Client, symbol: &str) -> String {
+    let code = strip_hk_suffix(symbol);
+    fetch_eastmoney_fundamentals(
+        client,
+        &EastmoneyParams {
+            display_symbol: symbol.to_string(),
+            secid: format!("116.{}", code),
+            datacenter_code: code,
+            title: "港股基本面".to_string(),
+        },
+    )
+    .await
 }
 
 /// 构建A股关键财务指标 markdown 表格
@@ -552,6 +603,7 @@ pub async fn fetch_fundamentals(client: &Client, symbol: &str) -> String {
     let market = detect_market(symbol);
     match market {
         Market::CNStock => fetch_cn_fundamentals(client, symbol).await,
+        Market::HKStock => fetch_hk_fundamentals(client, symbol).await,
         _ => fetch_us_fundamentals(client, symbol).await,
     }
 }
@@ -693,5 +745,25 @@ mod tests {
         assert!(table.contains("-2.80%"), "营收 YoY");
         // 无 N/A
         assert!(!table.contains("N/A"), "不应有 N/A: {}", table);
+    }
+
+    // 港股基本面走东方财富，国内网络即可达。
+    #[tokio::test]
+    #[ignore = "hits the live Eastmoney API"]
+    async fn test_live_fundamentals_hk() {
+        let client = crate::http::build_client().unwrap();
+        let out = fetch_fundamentals(&client, "0700.HK").await;
+        assert!(!out.starts_with("错误"), "0700.HK 基本面不应报错: {}", out);
+        assert!(out.contains("个股基本信息"), "应包含个股基本信息段落");
+        assert!(out.contains("港股基本面"), "应走港股东方财富通道而非 Yahoo");
+    }
+
+    // 港股 symbol 规范化：去掉 .HK/.hk 后缀，保留前导零。
+    #[test]
+    fn test_strip_hk_suffix() {
+        assert_eq!(strip_hk_suffix("0700.HK"), "0700");
+        assert_eq!(strip_hk_suffix("09988"), "09988");
+        assert_eq!(strip_hk_suffix("00700.hk"), "00700");
+        assert_eq!(strip_hk_suffix(" 9988.HK "), "9988");
     }
 }
