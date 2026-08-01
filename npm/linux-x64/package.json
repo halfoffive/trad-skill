@@ -1,10 +1,10 @@
 {
   "name": "@trad-skill/linux-x64",
-  "version": "1.6.0",
-  "description": "trad-data binary for Linux x64 (musl, statically linked)",
+  "version": "1.7.0",
+  "description": "trad-skill binary for Linux x64 (musl, statically linked)",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "git+https://github.com/halfoffive/trad-skill.git" },
   "os": ["linux"],
   "cpu": ["x64"],
-  "files": ["trad-data"]
+  "files": ["trad-skill"]
 }

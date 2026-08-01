@@ -1,9 +1,10 @@
 //! 技能安装器：把 tradingagents-analysis/ 技能复制到目标 AI agent 的 skills 目录。
 //!
-//! 这是原 `install.mjs`（Node ESM）的 Rust 移植：安装逻辑全部用 Rust 实现，
-//! npm 包 `trad-skill` 仅保留一个极薄的 JS launcher 负责解析平台二进制并 exec 本子命令。
+//! 安装逻辑全部用 Rust 实现，npm 包 `trad-skill` 仅保留一个极薄的 JS launcher
+//! 负责解析平台二进制并 exec 本程序。
 //!
 //! 默认目标：`~/.agents/skills`（通用 agent 目录）。可用 `--agent claude|opencode` 或 `--dir` 覆盖。
+//! 无子命令时默认进入安装流程；`stock` / `news` / `fundamentals` / `sentiment` 是数据子命令。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,37 +26,37 @@ pub enum AgentTarget {
     Opencode,
 }
 
-/// `trad-data install` 子命令参数
+/// `trad-skill install` 子命令参数（与顶层平铺参数保持一致）
 #[derive(Debug, Clone, Args)]
 pub struct InstallArgs {
     /// 目标 agent：claude | agents | opencode（默认 agents）
     #[arg(long, value_enum, conflicts_with = "dir")]
-    agent: Option<AgentTarget>,
+    pub agent: Option<AgentTarget>,
 
     /// 自定义目标 skills 父目录（与 --agent 互斥）
     #[arg(long, conflicts_with = "agent")]
-    dir: Option<String>,
+    pub dir: Option<String>,
 
     /// 源技能目录（含 SKILL.md 的 tradingagents-analysis 目录）。
     /// 生产环境由 JS launcher 注入；dev 下默认相对 CARGO_MANIFEST_DIR。
     #[arg(long = "skills-dir")]
-    skills_dir: Option<String>,
-
-    /// 要复制的 trad-data-wrapper.js 路径。默认 <skills-dir>/../../bin/trad-data-wrapper.js
-    #[arg(long = "wrapper")]
-    wrapper: Option<String>,
+    pub skills_dir: Option<String>,
 
     /// 要复制的平台二进制路径。默认取当前运行的可执行文件（self-copy）。
     #[arg(long = "bin-path")]
-    bin_path: Option<String>,
+    pub bin_path: Option<String>,
 
     /// 跳过复制平台二进制
     #[arg(long = "no-bin")]
-    no_bin: bool,
+    pub no_bin: bool,
 
     /// 只打印安装计划，不写入任何文件
     #[arg(long = "dry-run")]
-    dry_run: bool,
+    pub dry_run: bool,
+
+    /// 兼容历史：要复制的 wrapper（已忽略，仅保留以避免旧 launcher 报错）。
+    #[arg(long = "wrapper", hide = true)]
+    pub wrapper: Option<String>,
 }
 
 /// 读取 home 目录：优先 HOME（Unix），回退 USERPROFILE（Windows）。
@@ -117,7 +118,7 @@ fn resolve_parent_dir(dir: &Option<String>, agent: &Option<AgentTarget>) -> Resu
 
 /// 把 rustc 的 target 元素映射为 Node 的 process.platform/process.arch 命名。
 /// `std::env::consts` 在编译期按 target 固化，因此交叉编译产物在目标机上运行时返回正确值。
-/// 该键必须与 `bin/trad-data-wrapper.js` 的 strategy-1 查找路径一致，否则技能在 npm
+/// 该键必须与 `bin/trad-skill.js` 的 strategy-1 查找路径一致，否则技能在 npm
 /// 上下文之外将静默找不到二进制——务必保持同步并配测试。
 fn node_platform_key() -> String {
     let plat = match std::env::consts::OS {
@@ -188,17 +189,11 @@ pub fn run(args: InstallArgs) -> Result<()> {
     let parent_dir = resolve_parent_dir(&args.dir, &args.agent)?;
     let dest_dir = parent_dir.join(SKILL_NAME);
 
-    // 3. wrapper 源
-    let wrapper_src = match &args.wrapper {
-        Some(w) => PathBuf::from(w),
-        None => skills_src.join("../../bin/trad-data-wrapper.js"),
-    };
-
     let node_key = node_platform_key();
     let ext = bin_ext();
-    let bin_name = format!("trad-data{ext}");
+    let bin_name = format!("trad-skill{ext}");
 
-    // 4. 解析二进制源（self-copy：当前可执行文件即平台二进制）
+    // 3. 解析二进制源（self-copy：当前可执行文件即平台二进制）
     let bin_src = if args.no_bin {
         None
     } else {
@@ -208,11 +203,10 @@ pub fn run(args: InstallArgs) -> Result<()> {
         }
     };
 
-    // 5. dry-run：只打印计划
+    // 4. dry-run：只打印计划
     if args.dry_run {
         println!("【试运行】将安装 {SKILL_NAME} → {}", dest_dir.display());
         println!("  源技能目录：{}", skills_src.display());
-        println!("  wrapper：{}", wrapper_src.display());
         match &bin_src {
             Some(b) => println!(
                 "  二进制：{} → {}/{bin_name}",
@@ -224,7 +218,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         return Ok(());
     }
 
-    // 6. 真正安装：幂等（先删旧目录再复制）
+    // 5. 真正安装：幂等（先删旧目录再复制）
     fs::create_dir_all(&parent_dir)
         .with_context(|| format!("创建父目录失败：{}", parent_dir.display()))?;
     if dest_dir.exists() {
@@ -236,7 +230,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
     let dest_bin = dest_dir.join("bin");
     fs::create_dir_all(&dest_bin)?;
 
-    // 7. 复制 wrapper（始终需要：技能运行时通过它分发二进制调用）
+    // 6. 复制平台二进制到 bin/<platform>/trad-skill[.exe]
     let bin_installed = if !args.no_bin {
         if let Some(b) = &bin_src {
             if b.exists() {
@@ -256,32 +250,23 @@ pub fn run(args: InstallArgs) -> Result<()> {
         false
     };
 
-    if wrapper_src.exists() {
-        fs::copy(&wrapper_src, dest_bin.join("trad-data-wrapper.js"))?;
-    } else {
-        eprintln!(
-            "⚠ 找不到 wrapper：{}（技能运行时的二进制分发器将不可用）",
-            wrapper_src.display()
-        );
-    }
-
-    // 8. 打印结果
+    // 7. 打印结果
     println!("✓ 已安装 {SKILL_NAME} → {}", dest_dir.display());
     println!();
     println!("下一步：");
     if bin_installed {
-        println!("  ✓ trad-data 二进制已安装 ({node_key})");
+        println!("  ✓ trad-skill 二进制已安装 ({node_key})");
     } else {
-        println!("  ⚠ 数据二进制未安装，可改用 `bunx trad-data <子命令>` 调用数据工具。");
+        println!("  ⚠ 数据二进制未安装，可改用 `bunx trad-skill@latest <子命令>` 调用数据工具。");
     }
     println!("  1. 重启你的 AI agent / 开一个新会话，让它加载该技能。");
     println!("  2. 触发分析，例如：\"分析 AAPL\" 或 \"Analyze 600519\" 。");
     println!();
     println!("数据工具（Rust 二进制）:");
-    println!("  bunx trad-data stock --symbol AAPL");
-    println!("  bunx trad-data fundamentals --symbol AAPL");
-    println!("  bunx trad-data news --symbol AAPL");
-    println!("  bunx trad-data sentiment --symbol AAPL");
+    println!("  bunx trad-skill@latest stock --symbol AAPL");
+    println!("  bunx trad-skill@latest fundamentals --symbol AAPL");
+    println!("  bunx trad-skill@latest news --symbol AAPL");
+    println!("  bunx trad-skill@latest sentiment --symbol AAPL");
     Ok(())
 }
 
@@ -295,9 +280,21 @@ mod tests {
         std::env::set_var("USERPROFILE", tmp);
     }
 
+    fn default_install_args() -> InstallArgs {
+        InstallArgs {
+            agent: None,
+            dir: None,
+            skills_dir: None,
+            bin_path: None,
+            no_bin: true,
+            dry_run: false,
+            wrapper: None,
+        }
+    }
+
     #[test]
     fn agent_dir_mapping() {
-        let tmp = std::env::temp_dir().join("trad-data-install-test-agentdir");
+        let tmp = std::env::temp_dir().join("trad-skill-install-test-agentdir");
         std::fs::remove_dir_all(&tmp).ok();
         std::fs::create_dir_all(&tmp).unwrap();
         set_home(&tmp);
@@ -318,11 +315,10 @@ mod tests {
 
     #[test]
     fn default_target_is_agents() {
-        let tmp = std::env::temp_dir().join("trad-data-install-test-default");
+        let tmp = std::env::temp_dir().join("trad-skill-install-test-default");
         std::fs::remove_dir_all(&tmp).ok();
         std::fs::create_dir_all(&tmp).unwrap();
         set_home(&tmp);
-        // --dir 与 --agent 均未指定 → 默认 agents
         let resolved = resolve_parent_dir(&None, &None).unwrap();
         assert_eq!(resolved, tmp.join(".agents/skills"));
         std::fs::remove_dir_all(&tmp).ok();
@@ -330,16 +326,15 @@ mod tests {
 
     #[test]
     fn dir_and_agent_mutually_exclusive() {
-        // clap 的 conflicts_with 应在解析期拒绝
         use crate::Cli;
         use clap::Parser;
-        let r = Cli::try_parse_from(["trad-data", "install", "--dir", "x", "--agent", "claude"]);
+        let r = Cli::try_parse_from(["trad-skill", "install", "--dir", "x", "--agent", "claude"]);
         assert!(r.is_err(), "--dir 与 --agent 应互斥");
     }
 
     #[test]
     fn expand_tilde_basic() {
-        let tmp = std::env::temp_dir().join("trad-data-install-test-tilde");
+        let tmp = std::env::temp_dir().join("trad-skill-install-test-tilde");
         std::fs::remove_dir_all(&tmp).ok();
         std::fs::create_dir_all(&tmp).unwrap();
         set_home(&tmp);
@@ -351,7 +346,7 @@ mod tests {
 
     #[test]
     fn copy_dir_recursive_roundtrip() {
-        let root = std::env::temp_dir().join("trad-data-copytest");
+        let root = std::env::temp_dir().join("trad-skill-copytest");
         std::fs::remove_dir_all(&root).ok();
         let src = root.join("src");
         std::fs::create_dir_all(src.join("nested")).unwrap();
@@ -382,5 +377,25 @@ mod tests {
             "arch 部分 {0} 应为 x64/arm64",
             parts[1]
         );
+    }
+
+    #[test]
+    fn no_subcommand_defaults_to_install() {
+        use crate::Cli;
+        use clap::Parser;
+        let cli = Cli::try_parse_from(["trad-skill"]).expect("无子命令应解析成功");
+        assert!(cli.command.is_none());
+        // into_install_args 应能从顶层 flags 构造
+        let args = default_install_args();
+        assert!(args.agent.is_none());
+    }
+
+    #[test]
+    fn data_subcommand_passes_through() {
+        use crate::Cli;
+        use clap::Parser;
+        let cli = Cli::try_parse_from(["trad-skill", "stock", "--symbol", "AAPL"])
+            .expect("stock 子命令应解析成功");
+        assert!(matches!(cli.command, Some(crate::Commands::Stock { .. })));
     }
 }

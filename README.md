@@ -39,38 +39,38 @@ The pipeline runs in six stages:
 
 ### Via `bunx` (recommended)
 
-Install the skill with the built-in Rust installer (the `trad-data install` subcommand). `bunx` (or `npx`) fetches the package and runs a thin launcher that resolves your platform binary and installs the skill into the **generic agent directory** `~/.agents/skills` by default:
+Install the skill with the built-in Rust installer. `bunx` (or `npx`) fetches the package and runs a thin launcher that resolves your platform binary and installs the skill into the **generic agent directory** `~/.agents/skills` by default:
 
 ```bash
-bunx trad-skill                     # install to ~/.agents/skills (default)
+bunx trad-skill@latest              # install to ~/.agents/skills (default)
 ```
 
 Options:
 ```bash
-bunx trad-skill --agent claude      # install to ~/.claude/skills (Claude Code)
-bunx trad-skill --agent opencode    # install to ~/.config/opencode/skills
-bunx trad-skill --dir <path>        # install into a custom skills dir
-bunx trad-skill --dry-run           # print the install plan without writing
+bunx trad-skill@latest --agent claude      # install to ~/.claude/skills (Claude Code)
+bunx trad-skill@latest --agent opencode    # install to ~/.config/opencode/skills
+bunx trad-skill@latest --dir <path>        # install into a custom skills dir
+bunx trad-skill@latest --dry-run           # print the install plan without writing
 ```
 
-> `npx trad-skill` behaves identically if you don't have `bun` installed. On older npx versions use `npx -p trad-skill trad-skill`.
+> `npx trad-skill@latest` behaves identically if you don't have `bun` installed. On older npx versions use `npx -p trad-skill@latest trad-skill`.
 
 ### Data tool without installing
 
-Run the `trad-data` binary directly via `bunx` (or `npx`) without installing the skill — handy for one-off data fetches:
+The same binary also exposes `stock` / `news` / `fundamentals` / `sentiment` subcommands. Run them directly via `bunx` (or `npx`) without installing the skill — handy for one-off data fetches:
 
 ```bash
-bunx trad-data stock --symbol AAPL
-bunx trad-data news --symbol AAPL
-bunx trad-data fundamentals --symbol AAPL
-bunx trad-data sentiment --symbol AAPL
+bunx trad-skill@latest stock --symbol AAPL
+bunx trad-skill@latest news --symbol AAPL
+bunx trad-skill@latest fundamentals --symbol AAPL
+bunx trad-skill@latest sentiment --symbol AAPL
 ```
 
 ### For AI Agents
 
 If you are an AI agent and need to install this skill, run:
 ```bash
-bunx trad-skill
+bunx trad-skill@latest
 ```
 
 Then restart or open a new session to load the skill. The skill will be available at:
@@ -80,7 +80,7 @@ Then restart or open a new session to load the skill. The skill will be availabl
 
 ### Deprecated: `npx skills add` (vercel-labs/skills CLI)
 
-> **Deprecated.** The third-party `npx skills add halfoffive/trad-skill ...` flow (via [vercel-labs/skills](https://github.com/vercel-labs/skills)) is superseded by `bunx trad-skill`. It still works for now but is no longer recommended and may be removed in a future release.
+> **Deprecated.** The third-party `npx skills add halfoffive/trad-skill ...` flow (via [vercel-labs/skills](https://github.com/vercel-labs/skills)) is superseded by `bunx trad-skill@latest`. It still works for now but is no longer recommended and may be removed in a future release.
 
 ### Manual installation (using raw GitHub links)
 
@@ -190,14 +190,13 @@ Market auto-detection: 6-digit pure number (e.g., 600519, 000858) → A-shares, 
 ```
 trad-skill/                        # repo root (meta files + installer)
 ├── package.json                  # npm entry point (name: trad-skill)
-├── bin/trad-skill.js             # thin JS launcher -> Rust installer
-├── bin/trad-data-wrapper.js      # cross-platform binary wrapper
+├── bin/trad-skill.js             # thin JS launcher -> Rust binary (install + data)
 ├── README.md / README_CN.md       # bilingual docs with language switch
 ├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # AI-agent onboarding doc
 ├── LICENSE                        # Apache 2.0
 ├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 7-platform build
-├── crates/trad-data/              # Rust binary source (trad-data)
+├── crates/trad-data/              # Rust source (binary name: trad-skill)
 └── skills/
     └── tradingagents-analysis/    # the installable skill
         ├── SKILL.md               # Core skill instructions (pipeline, orchestration, output format)
@@ -242,30 +241,30 @@ See [references/data-sources.md](skills/tradingagents-analysis/references/data-s
 
 ---
 
-## Data Tool (`trad-data`)
+## Data Tool (`trad-skill`)
 
-Data is fetched by the `trad-data` Rust binary, which provides market data (OHLCV + indicators), news, fundamentals, and sentiment in a single compact output suitable for LLM prompt injection. The binary is distributed via `bin/` and invoked through `bin/trad-data-wrapper.js` for cross-platform compatibility.
+Data is fetched by the `trad-skill` Rust binary, which provides market data (OHLCV + indicators), news, fundamentals, and sentiment in a single compact output suitable for LLM prompt injection. The binary is distributed via `bin/` and invoked through `bin/trad-skill.js` for cross-platform compatibility. The same binary handles both install and data subcommands.
 
-> The agent must run `trad-data` by its **absolute path** inside the installed skill directory (e.g. `~/.claude/skills/tradingagents-analysis/bin/trad-data`), because a sub-agent's working directory is the user's project, not the skill folder. The skill's `SKILL.md` instructs the main agent to resolve that path before spawning analysts.
+> The agent must run `trad-skill` by its **absolute path** inside the installed skill directory (e.g. `~/.agents/skills/tradingagents-analysis/bin/<platform>/trad-skill`), because a sub-agent's working directory is the user's project, not the skill folder. The skill's `SKILL.md` instructs the main agent to resolve that path before spawning analysts.
 
 ```bash
 # Stock data: OHLCV tail + pre-computed indicators + optional stats
-trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Or run directly via bunx (no install needed):
-bunx trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+bunx trad-skill@latest stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Or by absolute path (how the agent invokes them):
-~/.claude/skills/tradingagents-analysis/bin/trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+~/.agents/skills/tradingagents-analysis/bin/<platform>/trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # Fetch news (default --limit 8 per source, summaries truncated)
-trad-data news --symbol AAPL --days 7 --limit 8
+trad-skill news --symbol AAPL --days 7 --limit 8
 
 # Fetch fundamentals (compact key-metrics table + company profile)
-trad-data fundamentals --symbol AAPL
+trad-skill fundamentals --symbol AAPL
 
 # Fetch sentiment (default --limit 15)
-trad-data sentiment --symbol AAPL --limit 15
+trad-skill sentiment --symbol AAPL --limit 15
 ```
 
 | Subcommand | Defaults (compact) | Expand flags |
@@ -275,7 +274,7 @@ trad-data sentiment --symbol AAPL --limit 15
 | `fundamentals` | compact key-metrics table | — |
 | `sentiment` | `--limit 15`, 8 messages/posts shown | `--limit N` |
 
-`trad-data` is the **primary** data source and is tried first. It is not a hard dependency in the sense that, if a subcommand errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts the command could not provide** — it never skips the binary outright.
+`trad-skill` is the **primary** data source and is tried first. It is not a hard dependency in the sense that, if a subcommand errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts the command could not provide** — it never skips the binary outright.
 
 ---
 

@@ -8,12 +8,12 @@ description: "Multi-agent stock/crypto trading analysis pipeline inspired by Tra
 If this skill is not yet installed and you need to use it, install it with the built-in Rust installer (default target: `~/.agents/skills`):
 
 ```bash
-bunx trad-skill
+bunx trad-skill@latest
 ```
 
-Options: `--agent claude` (→ `~/.claude/skills`) or `--agent opencode` (→ `~/.config/opencode/skills`), or `--dir <path>` for a custom location. `npx trad-skill` works identically as a fallback.
+Options: `--agent claude` (→ `~/.claude/skills`) or `--agent opencode` (→ `~/.config/opencode/skills`), or `--dir <path>` for a custom location. `npx trad-skill@latest` works identically as a fallback.
 
-> The legacy third-party `npx skills add halfoffive/trad-skill ...` flow is deprecated; prefer `bunx trad-skill`.
+> The legacy third-party `npx skills add halfoffive/trad-skill ...` flow is deprecated; prefer `bunx trad-skill@latest`.
 
 After installation, the skill will be available at one of these locations (check in order):
 - `~/.agents/skills/tradingagents-analysis` (default; OpenCode, Cline, Cursor, Windsurf, Codex, etc.)
@@ -21,7 +21,7 @@ After installation, the skill will be available at one of these locations (check
 - `~/.config/opencode/skills/tradingagents-analysis` (OpenCode global)
 
 Data tool (Rust binary):
-  The `trad-data` binary is included. It provides stock, fundamentals, news, and sentiment data for US/HK/Crypto markets. If the bundled binary is missing, run any subcommand directly via `bunx trad-data <subcommand>`.
+  The same `trad-skill` binary powers both the installer and data fetching. It provides stock, fundamentals, news, and sentiment data for US/HK/Crypto markets. If the bundled binary is missing, run any subcommand directly via `bunx trad-skill@latest <subcommand>` (e.g. `bunx trad-skill@latest stock --symbol AAPL`).
 
 Verify installation by checking that `SKILL.md` and `references/` exist in the skill directory.
 
@@ -76,10 +76,10 @@ Four sub-agents run simultaneously, each producing a structured report:
 
 | Analyst | Focus | Key inputs |
 |---|---|---|
-| **Market Analyst** | Technical indicators: SMA, EMA, MACD, RSI, Bollinger Bands, ATR, VWMA, MFI | OHLCV + **pre-computed indicators** via `trad-data stock` (analyst interprets, does not recompute) |
-| **Sentiment Analyst** | Social sentiment → composite score | StockTwits, Reddit (US) via `trad-data sentiment` |
-| **News Analyst** | Company news and macro context | Company news via `trad-data news` (FRED / Polymarket / macro: web-search fallback) |
-| **Fundamentals Analyst** | Financial statements: balance sheet, cashflow, income statement | Financials via `trad-data fundamentals` |
+| **Market Analyst** | Technical indicators: SMA, EMA, MACD, RSI, Bollinger Bands, ATR, VWMA, MFI | OHLCV + **pre-computed indicators** via `trad-skill stock` (analyst interprets, does not recompute) |
+| **Sentiment Analyst** | Social sentiment → composite score | StockTwits, Reddit (US) via `trad-skill sentiment` |
+| **News Analyst** | Company news and macro context | Company news via `trad-skill news` (FRED / Polymarket / macro: web-search fallback) |
+| **Fundamentals Analyst** | Financial statements: balance sheet, cashflow, income statement | Financials via `trad-skill fundamentals` |
 
 ### Stage 2 — Research Debate (SEQUENTIAL, 1–3 rounds)
 
@@ -125,7 +125,7 @@ Spawn **four parallel sub-agents**, one per analyst role. Each sub-agent receive
    - `references/prompts/fundamentals_analyst.md`
 
    > **CN market prompt swap.** 当 `market` 为 A 股或港股时，用 `references/prompts/china_market_analyst.md` 替换 `market_analyst.md`，用 `references/prompts/cn_news_analyst.md` 替换 `news_analyst.md`；其余 2 个分析师（Sentiment / Fundamentals）保持不变。Stage 2 及之后的 researcher / manager / risk debator 等角色不受 `market` 影响（其 prompt 通用，不区分市场）。
-3. The **absolute path** to the `trad-data` binary (see Section 6).
+3. The **absolute path** to the `trad-skill` binary (see Section 6).
 
 ### Resolve the skill directory first (important)
 
@@ -137,7 +137,7 @@ Locate the skill directory — it is typically one of:
 - `~/.agents/skills/tradingagents-analysis` (generic / OpenCode user-level)
 - `.claude/skills/tradingagents-analysis` or `.opencode/skills/tradingagents-analysis` (project-level)
 
-Set `SKILL_DIR` to that path and use it in every spawn.
+Set `SKILL_DIR` to that path and use it in every spawn. The platform binary lives at `{SKILL_DIR}/bin/<platform>/trad-skill[.exe]`, where `<platform>` is one of `win32-x64`, `win32-arm64`, `darwin-arm64`, `linux-x64`, `linux-arm64` (matching Node's `process.platform`-`process.arch`).
 
 ### Spawn template
 
@@ -146,17 +146,17 @@ Use background task spawning for parallelism:
 ```
 task(subagent_type="general", run_in_background=true,
      prompt="<role prompt contents>\n\nAnalyze {ticker} as of {date}.\n" +
-            "Gather data FIRST by running the script, then write your report.\n" +
-            "Run: \"{SKILL_DIR}/bin/trad-data-wrapper.js\" {subcommand} --symbol {ticker} ...\n" +
-            "or (if binary available): \"{SKILL_DIR}/bin/{platform}/{binary}\" {subcommand} --symbol {ticker} ...\n" +
-            "The script output is ALREADY compact and (for market data) pre-computes indicators — " +
+            "Gather data FIRST by running the binary, then write your report.\n" +
+            "Run: \"{SKILL_DIR}/bin/{platform}/trad-skill[.exe]\" {subcommand} --symbol {ticker} ...\n" +
+            "or (if no bundled binary is available): bunx trad-skill@latest {subcommand} --symbol {ticker} ...\n" +
+            "The binary output is ALREADY compact and (for market data) pre-computes indicators — " +
             "it is your data source AND your verified snapshot; do NOT call get_stock_data / " +
             "get_indicators / get_verified_market_snapshot or any other tool name, they do not exist. " +
-            "Do NOT copy raw script output into your report — cite the key numbers only. " +
-            "If the script errors, fall back to web search / browser tools only for the parts it could not provide.")
+            "Do NOT copy raw binary output into your report — cite the key numbers only. " +
+            "If the binary errors, fall back to web search / browser tools only for the parts it could not provide.")
 ```
 
-Substitute the correct subcommand **and** args per analyst (see Section 6). **`trad-data` is the primary data source** — the analyst must run its assigned subcommand before writing its report; web search / browser tools are a fallback only when the binary fails or returns no data for a given source.
+Substitute the correct subcommand **and** args per analyst (see Section 6). **`trad-skill` is the primary data source** — the analyst must run its assigned subcommand before writing its report; web search / browser tools are a fallback only when the binary fails or returns no data for a given source.
 
 > **Template variables in verbatim prompts.** The role prompts in `references/prompts/` contain LangChain-style variables (`{ticker}`, `{current_date}`, `{instrument_context}`, `{get_language_instruction()}`, `{tool_names}`, `{NO_EXTERNAL_TOOLS}`, and ~24 others — 30 in total). **Substitute them before spawning** per the table in `references/prompts/README.md` (§ "Template Variable Substitution"). Quick reference: `{ticker}` → ticker; `{target_label}` → `stock` (equities) or `asset` (crypto); `{asset_label}` → `company` (equities) or `asset` (crypto); `{fundamentals_label}` → `Company fundamentals report` (equities) or `Asset fundamentals report (may be unavailable for crypto)` (crypto); `{current_date}` → today; `{start_date}`/`{end_date}` → analysis window; `{instrument_context}` → `Market: <US/A股/港股/Crypto>; Ticker: <symbol>; Trade date: <date>`; `{get_language_instruction()}` → empty string (English) or ` Write your entire response in <lang>.` (non-English); `{tool_names}`/`{system_message}`/`{lessons_line}` → empty string; `{NO_EXTERNAL_TOOLS}` → empty (not set — fallback permitted); data-report variables (`{market_research_report}` etc.) → bound to stage outputs per "Re-injection discipline" below.
 
@@ -186,7 +186,7 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 ### Stage 1: Analyst Team
 
-- **Data**: each analyst runs its assigned `trad-data` subcommand (see Section 6).
+- **Data**: each analyst runs its assigned `trad-skill` subcommand (see Section 6).
 - **Prompt**: `references/prompts/{role}_analyst.md`.
 - **Output**: a **concise** structured markdown report (≤ ~400 words) leading with a `## Key Signals` digest (5–8 bullets), followed by a short evidence section and one summary table. Do not reproduce the raw output — cite key numbers only.
 - **Handoff**: keep each full report aside for the Portfolio Manager; extract the four `## Key Signals` digests into one context block for the Stage 2 & 5 debates (see "Re-injection discipline" above).
@@ -229,22 +229,22 @@ Debate stages (2 and 5) loop for the configured number of rounds. Each round, th
 
 ## 6. Data Gathering
 
-The `trad-data` Rust binary lives in this skill's `bin/` directory. It fetches, **compacts, and pre-computes** data for the analyst sub-agents — so the analyst interprets a small payload instead of burning tokens on raw data and arithmetic. **Run it with its absolute path** (see the "Resolve the skill directory first" note in Section 4); each subcommand prints a formatted string ready for prompt injection.
+The `trad-skill` Rust binary lives in this skill's `bin/<platform>/` directory. It fetches, **compacts, and pre-computes** data for the analyst sub-agents — so the analyst interprets a small payload instead of burning tokens on raw data and arithmetic. **Run it with its absolute path** (see the "Resolve the skill directory first" note in Section 4); each subcommand prints a formatted string ready for prompt injection. If the bundled binary is missing, the equivalent `bunx trad-skill@latest <subcommand>` works without an install.
 
 | Command | Purpose | Invocation |
 |---|---|---|
-| `trad-data stock` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). | `trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
-| `trad-data news` | Company news (US: Yahoo Finance + Google News RSS). Default `--limit 8` per source; all summaries truncated. | `trad-data news --symbol AAPL --days 7 --limit 8` |
-| `trad-data fundamentals` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `trad-data fundamentals --symbol AAPL` |
-| `trad-data sentiment` | Social sentiment from StockTwits, Reddit. Default `--limit 15`; message/post displays trimmed. | `trad-data sentiment --symbol AAPL --limit 15` |
+| `trad-skill stock` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). | `trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
+| `trad-skill news` | Company news (US: Yahoo Finance + Google News RSS). Default `--limit 8` per source; all summaries truncated. | `trad-skill news --symbol AAPL --days 7 --limit 8` |
+| `trad-skill fundamentals` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `trad-skill fundamentals --symbol AAPL` |
+| `trad-skill sentiment` | Social sentiment from StockTwits, Reddit. Default `--limit 15`; message/post displays trimmed. | `trad-skill sentiment --symbol AAPL --limit 15` |
 
-> **China A-share market**: `trad-data` supports A-share data via Eastmoney APIs. Use 6-digit symbols (e.g. `600519`) directly.
+> **China A-share market**: `trad-skill` supports A-share data via Eastmoney APIs. Use 6-digit symbols (e.g. `600519`) directly.
 
 For the full catalog of data sources, APIs, and fallback strategies, see `references/data-sources.md`.
 
 For technical indicator definitions and interpretation guidance, see `references/indicators.md`.
 
-> `trad-data` is the **primary** data source and must be tried first. If the binary errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts it could not provide** — never skip it outright.
+> `trad-skill` is the **primary** data source and must be tried first. If the binary errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts it could not provide** — never skip it outright.
 
 ---
 

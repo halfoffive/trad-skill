@@ -102,12 +102,12 @@ jobs:
         if: "!contains(matrix.target, 'windows')"
         uses: actions/upload-artifact@v7
         with:
-          name: trad-data-${{ matrix.target }}
-          path: crates/trad-data/target/${{ matrix.target }}/release/trad-data
+          name: trad-skill-${{ matrix.target }}
+          path: crates/trad-data/target/${{ matrix.target }}/release/trad-skill
 
       - name: Upload artifact (Windows)
         if: contains(matrix.target, 'windows')
         uses: actions/upload-artifact@v7
         with:
-          name: trad-data-${{ matrix.target }}
-          path: crates/trad-data/target/${{ matrix.target }}/release/trad-data.exe
+          name: trad-skill-${{ matrix.target }}
+          path: crates/trad-data/target/${{ matrix.target }}/release/trad-skill.exe

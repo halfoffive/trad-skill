@@ -54,11 +54,11 @@ cargo run -- install --dir /tmp/trad-skill-test --no-bin
 cargo run -- stock --symbol AAPL
 
 # End-to-end via bunx (after `npm pack`):
-bunx trad-skill --dry-run
-bunx trad-data stock --symbol AAPL
+bunx trad-skill@latest --dry-run
+bunx trad-skill@latest stock --symbol AAPL
 ```
 
-`npx trad-skill` / `npx trad-data` behave identically if `bun` is not installed.
+`npx trad-skill@latest` behaves identically if `bun` is not installed.
 
 ## Pull Request checklist
 
@@ -67,7 +67,7 @@ bunx trad-data stock --symbol AAPL
 - [ ] English (`README.md`) and Chinese (`README_CN.md`) docs are kept in parity.
 - [ ] `SKILL.md §2` (the "ask for the ticker first" prerequisite) is preserved.
 - [ ] **Do not edit `CLAUDE.md`** — it is a pointer to `AGENTS.md`. Edit `AGENTS.md` instead.
-- [ ] If you touched the installer, verify `node_platform_key()` (install.rs) still matches `bin/trad-data-wrapper.js` strategy-1 path, and `--dry-run` works.
+- [ ] If you touched the installer, verify `node_platform_key()` (install.rs) still matches `bin/trad-skill.js` strategy-1 path, and `--dry-run` works.
 - [ ] If you changed the default install target or flags, update README, README_CN, SKILL.md §1, and AGENTS.md together.
 
 ## Release procedure

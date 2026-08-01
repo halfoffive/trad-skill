@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-08-01
+
+### Added
+
+- **Unified Rust binary `trad-skill`**: the installer and data tool now ship as a single Rust binary. With no subcommand it runs the installer; `stock` / `news` / `fundamentals` / `sentiment` are data subcommands; an explicit `install` subcommand is also accepted. All primary logic (CLI parsing, install, data fetching) lives in Rust.
+- **Single `bunx trad-skill@latest` entry point**: `bunx trad-skill@latest` installs the skill; `bunx trad-skill@latest stock --symbol AAPL` fetches data without an install. The previous separate `trad-data` launcher is removed.
+
+### Changed
+
+- **All install commands in docs use `@latest`** to avoid stale caches in bunx/npx.
+- **Binary renamed** from `trad-data` to `trad-skill` (crate name `trad-data` in `crates/trad-data/` is unchanged to avoid path churn). The npm `bin` map now exposes only `trad-skill`; the previous `trad-data` bin entry is removed.
+- **`bin/trad-skill.js` is the only Node launcher** and handles both install and data dispatch. When the first user arg is a data subcommand (`stock`/`news`/`fundamentals`/`sentiment`) or `install`, args are passed through verbatim; otherwise the launcher prepends `install --skills-dir <pkgRoot>/skills/tradingagents-analysis`. The previous `bin/trad-data-wrapper.js` is deleted.
+- Install flags (`--agent`, `--dir`, `--skills-dir`, `--bin-path`, `--no-bin`, `--dry-run`) are accepted as **top-level flags** on the Rust binary in addition to `trad-skill install <flags>`, so `bunx trad-skill@latest --agent claude` resolves to install mode directly.
+- Platform npm packages now ship `trad-skill` / `trad-skill.exe` instead of `trad-data` / `trad-data.exe`; CI artifact names and release filenames updated accordingly.
+- HTTP user-agent updated to `trad-skill/1.7.0`.
+- `package.json` `description` refreshed to reflect the unified installer + data CLI.
+- Docs (`README.md`, `README_CN.md`, `SKILL.md`, `AGENTS.md`, `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `references/data-sources.md`) updated for the unified command and `@latest` pinning.
+
+### Removed
+
+- `bin/trad-data-wrapper.js` (merged into `bin/trad-skill.js`).
+- The `trad-data` bin entry in `package.json` (use `trad-skill <subcommand>` instead).
+
+### Notes
+
+- `package.json` `version`: `1.6.0` → `1.7.0`.
+- `crates/trad-data/Cargo.toml` `version`: `1.6.0` → `1.7.0` (added `[[bin]] name = "trad-skill"`).
+- All 5 `npm/<platform>/package.json` `version`: `1.6.0` → `1.7.0` with `files` switched to the `trad-skill[.exe]` binary.
+
 ## [1.6.0] - 2026-07-31
 
 ### Added

@@ -4,21 +4,20 @@
 
 An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `bunx trad-skill` (default target: `~/.agents/skills`); `npx trad-skill` works as a fallback.
 
-The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ + bin/). Rust source lives in `crates/trad-data/` — the binary serves as both the **data tool** and the **installer** (`trad-data install` subcommand) — with CI (cargo fmt/clippy/test + 7-platform cross-build) in `.github/workflows/ci.yml`.
+The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ + bin/). Rust source lives in `crates/trad-data/` — the compiled binary is named `trad-skill` and serves as both the **data tool** and the **installer** (default action when invoked with no subcommand) — with CI (cargo fmt/clippy/test + 7-platform cross-build) in `.github/workflows/ci.yml`.
 
 ## Structure
 
 ```
 trad-skill/                        # repo root (meta files + installer)
 ├── package.json                  # npm entry point (name: trad-skill)
-├── bin/trad-skill.js             # thin JS launcher -> Rust installer
-├── bin/trad-data-wrapper.js      # cross-platform binary wrapper (runtime)
+├── bin/trad-skill.js             # thin JS launcher -> Rust binary (install + data)
 ├── README.md / README_CN.md       # bilingual docs with language switch
 ├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # this file
 ├── LICENSE                        # Apache 2.0
 ├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 7-platform build
-├── crates/trad-data/              # Rust binary source (trad-data)
+├── crates/trad-data/              # Rust source (binary name: trad-skill)
 └── skills/
     └── tradingagents-analysis/    # the installable skill
         ├── SKILL.md               # skill entry point (YAML frontmatter)
@@ -31,25 +30,25 @@ trad-skill/                        # repo root (meta files + installer)
 
 Recommended (Rust installer via bunx; default target `~/.agents/skills`):
 ```bash
-bunx trad-skill                  # install to ~/.agents/skills (default)
-bunx trad-skill --agent claude   # install to ~/.claude/skills
-bunx trad-skill --dry-run        # print plan, write nothing
+bunx trad-skill@latest              # install to ~/.agents/skills (default)
+bunx trad-skill@latest --agent claude   # install to ~/.claude/skills
+bunx trad-skill@latest --dry-run        # print plan, write nothing
 ```
 
-Fallback (no `bun`): `npx trad-skill` behaves identically.
+Fallback (no `bun`): `npx trad-skill@latest` behaves identically.
 
-Data tool without installing: `bunx trad-data stock --symbol AAPL` (also `news` / `fundamentals` / `sentiment`).
+Data tool without installing: `bunx trad-skill@latest stock --symbol AAPL` (also `news` / `fundamentals` / `sentiment`). The same `trad-skill` binary handles both install and data subcommands.
 
 Deprecated: the third-party `npx skills add halfoffive/trad-skill ...` flow (vercel-labs/skills) still works but is no longer recommended.
 
-## Installer (`package.json` + `bin/trad-skill.js` + `trad-data install`)
+## Installer (`package.json` + `bin/trad-skill.js` + Rust binary)
 
-The installer logic is **Rust**, in the `trad-data install` subcommand (`crates/trad-data/src/install.rs`). The npm `trad-skill` bin entry is a zero-logic CJS launcher (`bin/trad-skill.js`) that resolves the platform binary (same two-strategy logic as `bin/trad-data-wrapper.js`) and execs `trad-data install --skills-dir <pkgRoot>/skills/tradingagents-analysis`.
+The installer logic is **Rust**, in `crates/trad-data/src/install.rs`. The compiled binary is named `trad-skill`; invoking it with no subcommand defaults to the install flow, and an explicit `install` subcommand is also accepted. The npm `trad-skill` bin entry is a zero-logic CJS launcher (`bin/trad-skill.js`) that resolves the platform binary and execs it. When the first user arg is a data subcommand (`stock`/`news`/`fundamentals`/`sentiment`) or `install`, args are passed through verbatim; otherwise the launcher prepends `install --skills-dir <pkgRoot>/skills/tradingagents-analysis`.
 
 - Copies `skills/tradingagents-analysis/` into the target agent's skills dir. **Default target: `~/.agents/skills`** (generic agent directory). Flags: `--dir <path>`, `--agent claude|agents|opencode` (mutually exclusive).
-- Copies `bin/trad-data-wrapper.js` into the skill's `bin/`, and copies the platform binary into `bin/<node-platform-key>/` via **self-copy** (`std::env::current_exe()`). `--bin-path` / `--no-bin` override.
+- Copies the platform binary into `bin/<node-platform-key>/` via **self-copy** (`std::env::current_exe()`). `--bin-path` / `--no-bin` override.
 - Idempotent (removes existing dir first). `--dry-run` prints the plan without writing.
-- `node_platform_key()` in `install.rs` maps rustc target consts → node platform/arch naming; this key MUST match `bin/trad-data-wrapper.js` strategy-1 path. Keep them in sync (unit-tested).
+- `node_platform_key()` in `install.rs` maps rustc target consts → node platform/arch naming; this key MUST match `bin/trad-skill.js` strategy-1 path. Keep them in sync (unit-tested).
 - The `files` field in `package.json` controls what bunx/npx packs: `bin/`, `skills/`, and the doc/LICENSE files.
 
 ## Source repos (read-only reference)
@@ -77,7 +76,7 @@ New dependencies must support all 7 CI targets:
 ### Build targets (7)
 x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-unknown-linux-musl, aarch64-unknown-linux-musl, aarch64-apple-darwin, x86_64-pc-windows-msvc, aarch64-pc-windows-msvc.
 
-When adding/removing targets, update: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `bin/trad-data-wrapper.js`.
+When adding/removing targets, update: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `bin/trad-skill.js`.
 
 ### Release
 - Version lives in **7 files that must stay in sync** (a desync silently breaks platform package install):

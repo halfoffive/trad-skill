@@ -11,10 +11,38 @@ use chrono::{Duration, Utc};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "trad-data", about = "TradingAgents data fetcher")]
+#[command(
+    name = "trad-skill",
+    about = "TradingAgents skill: installer + data fetcher",
+    version
+)]
 struct Cli {
+    /// 目标 agent：claude | agents | opencode（默认 agents）。仅 install 模式生效。
+    #[arg(long, value_enum, global = true)]
+    agent: Option<install::AgentTarget>,
+
+    /// 自定义目标 skills 父目录（与 --agent 互斥）。仅 install 模式生效。
+    #[arg(long, global = true)]
+    dir: Option<String>,
+
+    /// 源技能目录。仅 install 模式生效。
+    #[arg(long = "skills-dir", global = true)]
+    skills_dir: Option<String>,
+
+    /// 要复制的平台二进制路径。默认 self-copy。仅 install 模式生效。
+    #[arg(long = "bin-path", global = true)]
+    bin_path: Option<String>,
+
+    /// 跳过复制平台二进制。仅 install 模式生效。
+    #[arg(long = "no-bin", global = true)]
+    no_bin: bool,
+
+    /// 只打印安装计划，不写入。仅 install 模式生效。
+    #[arg(long = "dry-run", global = true)]
+    dry_run: bool,
+
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -61,20 +89,47 @@ enum Commands {
         #[arg(long, default_value_t = 15)]
         limit: u32,
     },
-    /// 安装 tradingagents-analysis 技能到 AI agent 的 skills 目录（原 install.mjs 的 Rust 实现）
+    /// 安装 tradingagents-analysis 技能（无子命令时的默认行为）
     Install {
         #[command(flatten)]
         args: install::InstallArgs,
     },
 }
 
+impl Cli {
+    /// 把顶层平铺的 install flags 收集为 InstallArgs（显式 `install` 子命令优先）。
+    fn into_install_args(self) -> install::InstallArgs {
+        match self.command {
+            Some(Commands::Install { args }) => args,
+            _ => install::InstallArgs {
+                agent: self.agent,
+                dir: self.dir,
+                skills_dir: self.skills_dir,
+                wrapper: None,
+                bin_path: self.bin_path,
+                no_bin: self.no_bin,
+                dry_run: self.dry_run,
+            },
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // 无子命令，或显式 `install` → 走安装器（无需 HTTP 客户端）
+    let is_install = matches!(cli.command, None | Some(Commands::Install { .. }));
+    if is_install {
+        let args = cli.into_install_args();
+        install::run(args)?;
+        return Ok(());
+    }
+
     let client = http::build_client()?;
 
     match cli.command {
-        Commands::Stock {
+        Some(Commands::Stock {
             symbol,
             start,
             end,
@@ -84,7 +139,7 @@ async fn main() -> anyhow::Result<()> {
             stats,
             no_stats,
             raw,
-        } => {
+        }) => {
             let use_indicators = indicators && !no_indicators;
             let use_stats = stats && !no_stats;
 
@@ -138,7 +193,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Commands::Fundamentals { symbol } => {
+        Some(Commands::Fundamentals { symbol }) => {
             let result = fundamentals::fetch_fundamentals(&client, &symbol).await;
             if result.starts_with("错误") {
                 eprintln!("{}", result);
@@ -146,11 +201,11 @@ async fn main() -> anyhow::Result<()> {
             }
             println!("{}", result);
         }
-        Commands::News {
+        Some(Commands::News {
             symbol,
             days,
             limit,
-        } => {
+        }) => {
             let result = news::fetch_news(&client, &symbol, days, limit).await;
             if result.starts_with("错误") {
                 eprintln!("{}", result);
@@ -158,7 +213,7 @@ async fn main() -> anyhow::Result<()> {
             }
             println!("{}", result);
         }
-        Commands::Sentiment { symbol, limit } => {
+        Some(Commands::Sentiment { symbol, limit }) => {
             let result = sentiment::fetch_sentiment(&client, &symbol, limit).await;
             if result.starts_with("错误") {
                 eprintln!("{}", result);
@@ -166,10 +221,7 @@ async fn main() -> anyhow::Result<()> {
             }
             println!("{}", result);
         }
-        Commands::Install { args } => {
-            // 安装无需网络/HTTP 客户端：直接委派给 install 模块后返回
-            install::run(args)?;
-        }
+        Some(Commands::Install { .. }) | None => unreachable!(),
     }
 
     Ok(())

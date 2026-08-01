@@ -35,38 +35,38 @@
 
 ### 通过 bunx 安装（推荐）
 
-使用内置的 Rust 安装器（`trad-data install` 子命令）安装技能。`bunx`（或 `npx`）拉取包并运行一个极简的 launcher，它解析当前平台的二进制并把技能安装到**通用 agent 目录** `~/.agents/skills`（默认）：
+使用内置的 Rust 安装器安装技能。`bunx`（或 `npx`）拉取包并运行一个极简的 launcher，它解析当前平台的二进制并把技能安装到**通用 agent 目录** `~/.agents/skills`（默认）：
 
 ```bash
-bunx trad-skill                     # 安装到 ~/.agents/skills（默认）
+bunx trad-skill@latest              # 安装到 ~/.agents/skills（默认）
 ```
 
 可选参数：
 ```bash
-bunx trad-skill --agent claude      # 安装到 ~/.claude/skills（Claude Code）
-bunx trad-skill --agent opencode    # 安装到 ~/.config/opencode/skills
-bunx trad-skill --dir <path>        # 安装到自定义技能目录
-bunx trad-skill --dry-run           # 只打印安装计划，不写入
+bunx trad-skill@latest --agent claude      # 安装到 ~/.claude/skills（Claude Code）
+bunx trad-skill@latest --agent opencode    # 安装到 ~/.config/opencode/skills
+bunx trad-skill@latest --dir <path>        # 安装到自定义技能目录
+bunx trad-skill@latest --dry-run           # 只打印安装计划，不写入
 ```
 
-> 若未安装 `bun`，`npx trad-skill` 行为完全一致。旧版 npx 可用 `npx -p trad-skill trad-skill`。
+> 若未安装 `bun`，`npx trad-skill@latest` 行为完全一致。旧版 npx 可用 `npx -p trad-skill@latest trad-skill`。
 
 ### 免安装直接使用数据工具
 
-无需安装技能即可通过 `bunx`（或 `npx`）直接运行 `trad-data` 二进制，适合一次性取数：
+同一个二进制还暴露 `stock` / `news` / `fundamentals` / `sentiment` 子命令。无需安装技能即可通过 `bunx`（或 `npx`）直接运行，适合一次性取数：
 
 ```bash
-bunx trad-data stock --symbol AAPL
-bunx trad-data news --symbol AAPL
-bunx trad-data fundamentals --symbol AAPL
-bunx trad-data sentiment --symbol AAPL
+bunx trad-skill@latest stock --symbol AAPL
+bunx trad-skill@latest news --symbol AAPL
+bunx trad-skill@latest fundamentals --symbol AAPL
+bunx trad-skill@latest sentiment --symbol AAPL
 ```
 
 ### 给 AI 代理的说明
 
 如果你是 AI 代理需要安装本技能，请运行：
 ```bash
-bunx trad-skill
+bunx trad-skill@latest
 ```
 
 安装后重启或开启新会话以加载技能。技能将安装在以下位置之一：
@@ -76,7 +76,7 @@ bunx trad-skill
 
 ### 已弃用：`npx skills add`（vercel-labs/skills CLI）
 
-> **已弃用。** 第三方 `npx skills add halfoffive/trad-skill ...` 流程（基于 [vercel-labs/skills](https://github.com/vercel-labs/skills)）已被 `bunx trad-skill` 取代。当前仍可用，但不再推荐，未来版本可能移除。
+> **已弃用。** 第三方 `npx skills add halfoffive/trad-skill ...` 流程（基于 [vercel-labs/skills](https://github.com/vercel-labs/skills)）已被 `bunx trad-skill@latest` 取代。当前仍可用，但不再推荐，未来版本可能移除。
 
 ### 手动安装（使用 raw GitHub 链接直接复制）
 
@@ -123,14 +123,14 @@ rm -rf /tmp/trad-skill
 ### A股特别说明
 
 - 股票代码使用6位纯数字格式（如 600519、000858）
-- `trad-data` 内部根据 6 位代码前缀自动判断交易所（6 开头 → 上海 .SS；0/3 开头 → 深圳 .SZ），用户只需提供 6 位纯数字
+- `trad-skill` 内部根据 6 位代码前缀自动判断交易所（6 开头 → 上海 .SS；0/3 开头 → 深圳 .SZ），用户只需提供 6 位纯数字
 - 数据源优先级：AKShare → yfinance
 - 支持中文新闻和情绪分析
 - 使用中国市场专用分析师提示词（`china_market_analyst.md`、`cn_news_analyst.md`）
 
 ### 港股特别说明
 
-- 使用 4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；`trad-data` 的 `zfill(5)` 两种都接受）
+- 使用 4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；`trad-skill` 的 `zfill(5)` 两种都接受）
 - 数据源：AKShare → yfinance
 - 支持港股通标的和港股主板股票
 
@@ -189,15 +189,14 @@ rm -rf /tmp/trad-skill
 
 ```
 trad-skill/                        # 仓库根目录（元文件 + 安装器）
-├── package.json                  # npx 入口（name: trad-skill）
-├── bin/trad-skill.js             # 极简 JS launcher -> Rust 安装器
-├── bin/trad-data-wrapper.js      # 跨平台二进制 wrapper
+├── package.json                  # npm 入口（name: trad-skill）
+├── bin/trad-skill.js             # 极简 JS launcher -> Rust 二进制（安装 + 数据）
 ├── README.md / README_CN.md       # 双语文档
 ├── CHANGELOG.md                   # 版本历史
 ├── AGENTS.md                      # AI 代理接入文档
 ├── LICENSE                        # Apache 2.0 许可证
 ├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 7平台构建
-├── crates/trad-data/              # Rust 二进制源码（trad-data）
+├── crates/trad-data/              # Rust 源码（产出二进制名：trad-skill）
 └── skills/
     └── tradingagents-analysis/    # 可安装的技能
         ├── SKILL.md               # 核心技能指令文件
@@ -250,30 +249,30 @@ trad-skill/                        # 仓库根目录（元文件 + 安装器）
 
 ---
 
-## 数据工具（`trad-data`）
+## 数据工具（`trad-skill`）
 
-数据通过 `trad-data` Rust 二进制文件获取，提供行情数据（OHLCV + 指标）、新闻、基本面和情绪数据，输出为紧凑格式，适合 LLM 提示词注入。二进制文件通过 `bin/` 分发，并通过 `bin/trad-data-wrapper.js` 实现跨平台兼容。
+数据通过 `trad-skill` Rust 二进制获取，提供行情数据（OHLCV + 指标）、新闻、基本面和情绪数据，输出为紧凑格式，适合 LLM 提示词注入。二进制通过 `bin/` 分发，并通过 `bin/trad-skill.js` 实现跨平台兼容；同一个二进制同时承载安装和数据子命令。
 
-> 代理必须用技能安装目录内的**绝对路径**来运行 `trad-data`（如 `~/.claude/skills/tradingagents-analysis/bin/trad-data`），因为子代理的工作目录是用户项目，而非技能文件夹。`SKILL.md` 已指示主代理在派生子代理前先解析该路径。
+> 代理必须用技能安装目录内的**绝对路径**来运行 `trad-skill`（如 `~/.agents/skills/tradingagents-analysis/bin/<platform>/trad-skill`），因为子代理的工作目录是用户项目，而非技能文件夹。`SKILL.md` 已指示主代理在派生子代理前先解析该路径。
 
 ```bash
 # 行情数据：尾部 OHLCV + 预计算指标 + 可选统计
-trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 或通过 bunx 直接运行（免安装）：
-bunx trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+bunx trad-skill@latest stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 或用绝对路径调用（代理实际调用方式）：
-~/.claude/skills/tradingagents-analysis/bin/trad-data stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
+~/.agents/skills/tradingagents-analysis/bin/<platform>/trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
 # 获取新闻（默认 --limit 8，摘要截断）
-trad-data news --symbol AAPL --days 7 --limit 8
+trad-skill news --symbol AAPL --days 7 --limit 8
 
 # 获取基本面（精简关键指标表 + 公司概况）
-trad-data fundamentals --symbol AAPL
+trad-skill fundamentals --symbol AAPL
 
 # 获取情绪数据（默认 --limit 15）
-trad-data sentiment --symbol AAPL --limit 15
+trad-skill sentiment --symbol AAPL --limit 15
 ```
 
 | 子命令 | 默认值（紧凑） | 扩展参数 |
@@ -283,7 +282,7 @@ trad-data sentiment --symbol AAPL --limit 15
 | `fundamentals` | 精简关键指标表 | — |
 | `sentiment` | `--limit 15`，8条消息/帖子 | `--limit N` |
 
-`trad-data` 是**主要**数据源，优先尝试。它不是硬性依赖：当某个子命令执行失败或数据源不可用时，代理**仅对子命令未能提供的部分**回退到网络搜索/浏览器工具——绝不跳过二进制直接用网页搜索。
+`trad-skill` 是**主要**数据源，优先尝试。它不是硬性依赖：当某个子命令执行失败或数据源不可用时，代理**仅对子命令未能提供的部分**回退到网络搜索/浏览器工具——绝不跳过二进制直接用网页搜索。
 
 ---
 

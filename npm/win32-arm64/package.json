@@ -1,10 +1,10 @@
 {
   "name": "@trad-skill/win32-arm64",
-  "version": "1.6.0",
-  "description": "trad-data binary for Windows ARM64",
+  "version": "1.7.0",
+  "description": "trad-skill binary for Windows ARM64",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "git+https://github.com/halfoffive/trad-skill.git" },
   "os": ["win32"],
   "cpu": ["arm64"],
-  "files": ["trad-data.exe"]
+  "files": ["trad-skill.exe"]
 }

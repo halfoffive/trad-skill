@@ -125,9 +125,9 @@ Data sources are configured via:
 
 ## Implementation Notes
 
-Data fetching is implemented in Rust (`trad-data` binary) for all markets including US, HK, Crypto, and China A-shares.
+Data fetching is implemented in Rust (`trad-skill` binary) for all markets including US, HK, Crypto, and China A-shares.
 
-### Rust Binary: trad-data
+### Rust Binary: trad-skill
 - US stocks: Yahoo Finance v8/v10 API (direct HTTP)
 - HK stocks: Eastmoney push2his API (direct HTTP)
 - Crypto: Yahoo Finance API (same as US stocks)

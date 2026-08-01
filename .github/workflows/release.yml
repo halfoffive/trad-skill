@@ -110,15 +110,15 @@ jobs:
         if: "!contains(matrix.target, 'windows')"
         run: |
           mkdir -p release
-          cp crates/trad-data/target/${{ matrix.target }}/release/trad-data release/trad-data-${{ matrix.target }}
-          chmod +x release/trad-data-${{ matrix.target }}
+          cp crates/trad-data/target/${{ matrix.target }}/release/trad-skill release/trad-skill-${{ matrix.target }}
+          chmod +x release/trad-skill-${{ matrix.target }}
 
       - name: Prepare artifact (Windows)
         if: contains(matrix.target, 'windows')
         shell: bash
         run: |
           mkdir -p release
-          cp crates/trad-data/target/${{ matrix.target }}/release/trad-data.exe release/trad-data-${{ matrix.target }}.exe
+          cp crates/trad-data/target/${{ matrix.target }}/release/trad-skill.exe release/trad-skill-${{ matrix.target }}.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -185,7 +185,7 @@ jobs:
             sha=$(grep "$fname" SHA256SUMS.txt | awk '{print $1}')
             
             # Parse target from filename
-            target="${fname#trad-data-}"
+            target="${fname#trad-skill-}"
             target="${target%.exe}"
             
             # Determine platform and arch
@@ -260,12 +260,12 @@ jobs:
 
       - name: Prepare platform packages
         run: |
-          cp artifacts/trad-data-x86_64-pc-windows-msvc.exe npm/win32-x64/trad-data.exe
-          cp artifacts/trad-data-aarch64-pc-windows-msvc.exe npm/win32-arm64/trad-data.exe
-          cp artifacts/trad-data-aarch64-apple-darwin npm/darwin-arm64/trad-data
-          cp artifacts/trad-data-x86_64-unknown-linux-musl npm/linux-x64/trad-data
-          cp artifacts/trad-data-aarch64-unknown-linux-musl npm/linux-arm64/trad-data
-          chmod +x npm/darwin-arm64/trad-data npm/linux-x64/trad-data npm/linux-arm64/trad-data
+          cp artifacts/trad-skill-x86_64-pc-windows-msvc.exe npm/win32-x64/trad-skill.exe
+          cp artifacts/trad-skill-aarch64-pc-windows-msvc.exe npm/win32-arm64/trad-skill.exe
+          cp artifacts/trad-skill-aarch64-apple-darwin npm/darwin-arm64/trad-skill
+          cp artifacts/trad-skill-x86_64-unknown-linux-musl npm/linux-x64/trad-skill
+          cp artifacts/trad-skill-aarch64-unknown-linux-musl npm/linux-arm64/trad-skill
+          chmod +x npm/darwin-arm64/trad-skill npm/linux-x64/trad-skill npm/linux-arm64/trad-skill
 
       - name: Publish platform packages
         run: |
