@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.3] - 2026-08-01
+
+### Fixed
+
+- **美股 `fundamentals` 公司概况打印原始 JSON**：`fmt_num` 新增对 Yahoo `{fmt,raw}` 值对象的处理（优先取 `fmt`，如 "466.82B"/"148.75%"），修复 ROE/总营收/利润率等显示为 `{"fmt":...,"raw":...}` 的问题。
+- **美股 `fundamentals` 市值/PE/PB/公司名 N/A**：quoteSummary 追加 `price`/`summaryDetail` 模块，并按 `price.marketCap`→`defaultKeyStats.marketCap`、`summaryDetail.trailingPE`→`defaultKeyStats.trailingPE`、`defaultKeyStats.priceToBook`→`summaryDetail.priceToBook`、`longName`→`shortName`→symbol 依次兜底。
+- **美股 `fundamentals` 财务报表大面积 N/A**：Yahoo quoteSummary 的 `incomeStatementHistory`/`balanceSheetHistory`/`cashflowStatementHistory` 模块已常返回空数组，改用 yfinance 同款的 **fundamentals-timeseries** 接口按年度取数（营收/净利/摊薄EPS/毛利/总资产/总负债/股东权益/经营现金流/自由现金流，金额用 `reportedValue.fmt` 显示）。
+- **A股 `sentiment` 个股评论 综合得分/目前排名/关注指数 全 N/A**：`format_cn_comment_table` 字段名修正为东方财富 `RPT_DMSK_TS_STOCKNEW` 的实际字段 `TOTALSCORE`/`RANK`/`FOCUS`（原 `COMMENT_SCORE`/`CURRENT_RANK`/`FOCUS_INDEX` 不存在）；`RANK` 按整数显示。
+
+### Changed
+
+- HTTP user-agent 更新为 `trad-skill/1.8.3`。
+
+### Notes
+
+- `package.json` `version`: `1.8.2` → `1.8.3`（+ 5 个 `optionalDependencies` `@trad-skill/*` pin）。
+- `crates/trad-data/Cargo.toml` `version`: `1.8.2` → `1.8.3`。
+- 5 个 `npm/<platform>/package.json` `version`: `1.8.2` → `1.8.3`。
+
 ## [1.8.2] - 2026-08-01
 
 ### Fixed
