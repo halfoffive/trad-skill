@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use crate::http::get_with_retry;
 use crate::market::{detect_market, Market};
+use crate::yahoo::yahoo_get_body;
 
 // ───────────────────────── 工具函数 ─────────────────────────
 
@@ -85,12 +86,17 @@ async fn fetch_us_fundamentals(client: &Client, symbol: &str) -> String {
         symbol, modules
     );
 
-    let resp = match get_with_retry(client, &url, Some(2)).await {
-        Ok(r) => r,
-        Err(e) => return format!("错误: 获取 {} 基本面数据失败 - {}", symbol, e),
+    let resp_text = match yahoo_get_body(client, &url).await {
+        Ok(b) => b,
+        Err(e) => {
+            return format!(
+                "错误: 获取 {} 基本面数据失败 - {}（Yahoo 在部分地区不可达；A股请用 6 位代码，自动走东方财富）",
+                symbol, e
+            )
+        }
     };
 
-    let body: Value = match resp.json().await {
+    let body: Value = match serde_json::from_str(&resp_text) {
         Ok(v) => v,
         Err(e) => return format!("错误: 解析响应失败 - {}", e),
     };
@@ -451,5 +457,31 @@ pub async fn fetch_fundamentals(client: &Client, symbol: &str) -> String {
     match market {
         Market::CNStock => fetch_cn_fundamentals(client, symbol).await,
         _ => fetch_us_fundamentals(client, symbol).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 真实网络集成测试：默认不进 CI，手动 `cargo test -- --ignored` 运行。
+    // 验证 Yahoo quoteSummary 的 crumb 握手（修复 401 Unauthorized）。
+    #[tokio::test]
+    #[ignore = "hits the live Yahoo Finance API"]
+    async fn test_live_fundamentals_aapl() {
+        let client = crate::http::build_client().unwrap();
+        let out = fetch_fundamentals(&client, "AAPL").await;
+        assert!(!out.starts_with("错误"), "AAPL 基本面不应报错: {}", out);
+        assert!(out.contains("公司概况"), "应包含公司概况段落");
+    }
+
+    // A股基本面走东方财富，国内网络即可达。
+    #[tokio::test]
+    #[ignore = "hits the live Eastmoney API"]
+    async fn test_live_fundamentals_cn() {
+        let client = crate::http::build_client().unwrap();
+        let out = fetch_fundamentals(&client, "600519").await;
+        assert!(!out.starts_with("错误"), "600519 基本面不应报错: {}", out);
+        assert!(out.contains("个股基本信息"), "应包含个股基本信息段落");
     }
 }

@@ -6,6 +6,7 @@ mod install;
 mod market;
 mod news;
 mod sentiment;
+mod yahoo;
 
 use chrono::{Duration, Utc};
 use clap::{Parser, Subcommand};

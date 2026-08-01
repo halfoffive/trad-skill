@@ -1,5 +1,6 @@
 use crate::http::get_with_retry_headers;
 use crate::market::OhlcvRow;
+use crate::yahoo::{append_crumb, get_crumb, BROWSER_UA};
 use chrono::NaiveDate;
 use reqwest::Client;
 use serde_json::Value;
@@ -118,56 +119,6 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
     Ok(rows)
 }
 
-/// 浏览器 User-Agent：Yahoo Finance 会封锁非浏览器 UA（尤其数据中心 IP），
-/// 所有 Yahoo 请求必须携带真实浏览器 UA。
-const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-
-/// 简单的 URL 编码（用于 crumb 参数，镜像 news.rs 的同名实现）
-fn url_encode(s: &str) -> String {
-    let mut result = String::new();
-    for b in s.as_bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(*b as char);
-            }
-            b' ' => result.push_str("%20"),
-            _ => result.push_str(&format!("%{:02X}", b)),
-        }
-    }
-    result
-}
-
-/// 获取 Yahoo Finance crumb token（yfinance 底层反爬握手）
-///
-/// 流程：先访问 fc.yahoo.com 种 cookie（cookie store 自动保存），
-/// 再用同一 cookie 请求 v1/test/getcrumb 取得 crumb 字符串。
-/// 任一步失败返回 None（调用方仍可尝试无 crumb 请求）。
-async fn get_crumb(client: &Client) -> Option<String> {
-    // 种 cookie（响应状态码无关紧要，忽略结果）
-    let _ = client
-        .get("https://fc.yahoo.com")
-        .header("User-Agent", BROWSER_UA)
-        .send()
-        .await;
-
-    let resp = client
-        .get("https://query2.finance.yahoo.com/v1/test/getcrumb")
-        .header("User-Agent", BROWSER_UA)
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let crumb = resp.text().await.ok()?;
-    let crumb = crumb.trim();
-    if crumb.is_empty() {
-        None
-    } else {
-        Some(crumb.to_string())
-    }
-}
-
 /// 单次 Yahoo chart 请求（query2 端点 + 浏览器 UA，可选 crumb）
 async fn fetch_yahoo_chart(
     client: &Client,
@@ -176,13 +127,14 @@ async fn fetch_yahoo_chart(
     period2: i64,
     crumb: Option<&str>,
 ) -> Result<Vec<OhlcvRow>, String> {
-    let mut url = format!(
+    let base = format!(
         "https://query2.finance.yahoo.com/v8/finance/chart/{}?period1={}&period2={}&interval=1d",
         symbol, period1, period2
     );
-    if let Some(c) = crumb {
-        url.push_str(&format!("&crumb={}", url_encode(c)));
-    }
+    let url = match crumb {
+        Some(c) => append_crumb(&base, c),
+        None => base,
+    };
 
     let resp = get_with_retry_headers(client, &url, &[("User-Agent", BROWSER_UA)], Some(2))
         .await
@@ -237,14 +189,6 @@ pub async fn fetch_us_ohlcv(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_url_encode() {
-        assert_eq!(url_encode("hello world"), "hello%20world");
-        assert_eq!(url_encode("AAPL"), "AAPL");
-        assert_eq!(url_encode("a&b=c"), "a%26b%3Dc");
-        assert_eq!(url_encode("a+b/c"), "a%2Bb%2Fc");
-    }
 
     #[test]
     fn test_parse_yahoo_happy_path() {
