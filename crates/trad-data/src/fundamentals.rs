@@ -397,20 +397,11 @@ fn build_us_timeseries_table(body: &Value, metrics: &[(&str, &str)]) -> String {
 
 // ───────────────────────── 东方财富基本面（A股/港股共享） ─────────────────────────
 
-/// 去掉港股 `.HK`/`.hk` 后缀，保留前导零（如 0700.HK → 0700，09988 → 09988）。
-fn strip_hk_suffix(symbol: &str) -> String {
-    let s = symbol.trim();
-    s.strip_suffix(".HK")
-        .or_else(|| s.strip_suffix(".hk"))
-        .unwrap_or(s)
-        .to_string()
-}
-
 /// 东方财富基本面请求参数（A股/港股共享）。
 struct EastmoneyParams {
     /// 标题中展示的代码（用户原始输入，如 600519 / 0700.HK）
     display_symbol: String,
-    /// push2 API secid（如 1.600519 / 116.0700）
+    /// push2 API secid（如 1.600519 / 116.00700）
     secid: String,
     /// datacenter SECURITY_CODE 过滤值（A股=代码，港股=去 .HK 后缀）
     datacenter_code: String,
@@ -514,7 +505,8 @@ async fn fetch_cn_fundamentals(client: &Client, symbol: &str) -> String {
 
 /// 获取港股基本面数据（东方财富 API，secid 前缀 116）
 async fn fetch_hk_fundamentals(client: &Client, symbol: &str) -> String {
-    let code = strip_hk_suffix(symbol);
+    // 港股 secid / datacenter 代码必须 5 位零填充（0700.HK -> 00700）
+    let code = crate::market::hk_eastmoney_code(symbol);
     fetch_eastmoney_fundamentals(
         client,
         &EastmoneyParams {
@@ -756,14 +748,5 @@ mod tests {
         assert!(!out.starts_with("错误"), "0700.HK 基本面不应报错: {}", out);
         assert!(out.contains("个股基本信息"), "应包含个股基本信息段落");
         assert!(out.contains("港股基本面"), "应走港股东方财富通道而非 Yahoo");
-    }
-
-    // 港股 symbol 规范化：去掉 .HK/.hk 后缀，保留前导零。
-    #[test]
-    fn test_strip_hk_suffix() {
-        assert_eq!(strip_hk_suffix("0700.HK"), "0700");
-        assert_eq!(strip_hk_suffix("09988"), "09988");
-        assert_eq!(strip_hk_suffix("00700.hk"), "00700");
-        assert_eq!(strip_hk_suffix(" 9988.HK "), "9988");
     }
 }
