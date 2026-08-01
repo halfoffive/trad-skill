@@ -13,6 +13,7 @@ use serde_json::Value;
 
 use crate::http::get_with_retry;
 use crate::market::{detect_market, Market};
+use crate::yahoo::yahoo_get_body;
 
 /// 摘要最大字符数
 const MAX_SUMMARY_CHARS: usize = 200;
@@ -73,12 +74,12 @@ async fn fetch_yfinance_news(client: &Client, symbol: &str, days: u32, limit: u3
         symbol
     );
 
-    let resp = match get_with_retry(client, &url, Some(2)).await {
-        Ok(r) => r,
+    let resp_text = match yahoo_get_body(client, &url).await {
+        Ok(b) => b,
         Err(e) => return format!("错误: 获取 {} 新闻失败 - {}", symbol, e),
     };
 
-    let body: Value = match resp.json().await {
+    let body: Value = match serde_json::from_str(&resp_text) {
         Ok(v) => v,
         Err(e) => return format!("错误: 解析 {} 新闻响应失败 - {}", symbol, e),
     };

@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1] - 2026-08-01
+
+### Fixed
+
+- **`fundamentals` / `news` 401 Unauthorized**: Yahoo Finance 的 `v10/finance/quoteSummary` 端点（`fundamentals.rs`、`news.rs`）与 chart 一样需要 crumb token，此前直连导致 `错误: 获取 AAPL 基本面数据失败 - HTTP 请求失败: 401 Unauthorized`。现复用与 `stock` 相同的 cookie + crumb + 浏览器 UA 握手。
+- 抽取共享模块 `yahoo.rs`（`BROWSER_UA` / `url_encode` / `get_crumb` / `append_crumb` / `yahoo_get_body`），`market/us.rs`、`fundamentals.rs`、`news.rs` 统一复用，消除重复的握手逻辑。
+- Yahoo 不可达时 `fundamentals` 错误信息附带指引（A股用 6 位代码自动走东方财富）。
+
+### Changed
+
+- 文档（`README.md` / `README_CN.md` / `SKILL.md` / `references/data-sources.md`）：新增 A股 `fundamentals` / `news` 示例（自动走东方财富），并强化指引——A股优先东方财富源；Yahoo 不可达（`未知错误` / `401` / `403`）时美股行情用 `--source eastmoney`，美股 fundamentals/news 回退网络搜索。
+- HTTP user-agent 更新为 `trad-skill/1.8.1`。
+
+### Notes
+
+- `package.json` `version`: `1.8.0` → `1.8.1`（+ 5 个 `optionalDependencies` `@trad-skill/*` pin）。
+- `crates/trad-data/Cargo.toml` `version`: `1.8.0` → `1.8.1`。
+- 5 个 `npm/<platform>/package.json` `version`: `1.8.0` → `1.8.1`。
+
 ## [1.8.0] - 2026-08-01
 
 ### Added

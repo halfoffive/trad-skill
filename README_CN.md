@@ -280,6 +280,10 @@ trad-skill fundamentals --symbol AAPL
 
 # 获取情绪数据（默认 --limit 15）
 trad-skill sentiment --symbol AAPL --limit 15
+
+# A股基本面/新闻自动走东方财富（无需 Yahoo）：
+trad-skill fundamentals --symbol 600519
+trad-skill news --symbol 600519
 ```
 
 | 子命令 | 默认值（紧凑） | 扩展参数 |
@@ -290,6 +294,8 @@ trad-skill sentiment --symbol AAPL --limit 15
 | `sentiment` | `--limit 15`，8条消息/帖子 | `--limit N` |
 
 `stock --source` 用于选择数据渠道：默认按 symbol 自动识别——美股/加密货币走 Yahoo Finance，A股/港股走东方财富。传 `--source eastmoney` 可把美股改走东方财富（适用于 Yahoo 被区域封锁的场景）；传 `--source yahoo` 可强制走 Yahoo（A股/港股代码会映射为 `.SS`/`.SZ`/`.HK`）。东方财富不提供加密货币行情。
+
+**Yahoo Finance 不可达时**（症状：数据中心/云 IP 上报 `未知错误`、`401 Unauthorized` 或 `403 Forbidden`）：A股的 `stock` / `fundamentals` / `news` 已自动走东方财富——直接传 6 位代码即可；美股行情加 `--source eastmoney`；美股 `fundamentals` / `news` 无东方财富对应源，代理会对这部分回退到网络搜索。
 
 `trad-skill` 是**主要**数据源，优先尝试。它不是硬性依赖：当某个子命令执行失败或数据源不可用时，代理**仅对子命令未能提供的部分**回退到网络搜索/浏览器工具——绝不跳过二进制直接用网页搜索。
 
