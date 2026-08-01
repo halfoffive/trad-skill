@@ -238,7 +238,9 @@ The `trad-skill` Rust binary lives in this skill's `bin/<platform>/` directory. 
 | `trad-skill fundamentals` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `trad-skill fundamentals --symbol AAPL` |
 | `trad-skill sentiment` | Social sentiment from StockTwits, Reddit. Default `--limit 15`; message/post displays trimmed. | `trad-skill sentiment --symbol AAPL --limit 15` |
 
-> **China A-share market**: `trad-skill` supports A-share data via Eastmoney APIs. Use 6-digit symbols (e.g. `600519`) directly.
+> **China A-share market**: `trad-skill` supports A-share data via Eastmoney APIs. Use 6-digit symbols (e.g. `600519`) directly — e.g. `trad-skill stock --symbol 600519 --tail 30`.
+>
+> **Data channel (`--source yahoo|eastmoney`)**: `stock` auto-selects the channel from the symbol (US/Crypto → Yahoo Finance, A-share/HK → Eastmoney). Pass `--source eastmoney` to route US stocks through Eastmoney when Yahoo Finance is region-blocked (symptom: `未知错误` or HTTP 403), or `--source yahoo` to force Yahoo (A-share/HK symbols are mapped to `.SS`/`.SZ`/`.HK`). Eastmoney does not serve crypto.
 
 For the full catalog of data sources, APIs, and fallback strategies, see `references/data-sources.md`.
 

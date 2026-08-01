@@ -2,6 +2,7 @@ pub mod cn;
 pub mod crypto;
 pub mod hk;
 pub mod us;
+pub mod us_em;
 
 /// 市场类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,7 +13,17 @@ pub enum Market {
     Crypto,
 }
 
+/// 数据渠道（`--source`）。不指定时按市场自动选择默认渠道。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Source {
+    /// Yahoo Finance：美股/加密货币默认；A股/港股会映射为 .SS/.SZ/.HK 后走 Yahoo。
+    Yahoo,
+    /// 东方财富：A股/港股默认；美股备用通道（绕开 Yahoo 区域封锁）。不支持加密货币。
+    Eastmoney,
+}
+
 /// OHLCV 数据行（各市场共享）
+#[derive(Debug, Clone, PartialEq)]
 pub struct OhlcvRow {
     pub date: String,
     pub open: f64,
@@ -103,18 +114,98 @@ pub fn parse_eastmoney_klines(
     rows
 }
 
-/// 统一 OHLCV 数据获取入口，自动检测市场
-pub async fn fetch_ohlcv(
+/// A股 6 位代码 → Yahoo 后缀（6 开头 → .SS 沪市，否则 → .SZ 深市）
+fn cn_to_yahoo_symbol(symbol: &str) -> String {
+    let s = symbol.trim();
+    if s.starts_with('6') {
+        format!("{}.SS", s)
+    } else {
+        format!("{}.SZ", s)
+    }
+}
+
+/// 港股代码 → Yahoo `.HK` 后缀（去掉已有 .HK，去前导零后补零到 4 位，如 00700 → 0700.HK）
+fn hk_to_yahoo_symbol(symbol: &str) -> String {
+    let s = symbol.trim();
+    let digits = s
+        .strip_suffix(".HK")
+        .or_else(|| s.strip_suffix(".hk"))
+        .unwrap_or(s);
+    let trimmed = digits.trim_start_matches('0');
+    let core = if trimmed.is_empty() { "0" } else { trimmed };
+    format!("{:0>4}.HK", core)
+}
+
+/// 美股在东方财富的 secid 候选（按常见度排序）：105=NASDAQ, 106=NYSE, 107=AMEX。
+/// 无交易所映射时由 us_em 依次尝试。
+fn us_eastmoney_secids(symbol: &str) -> Vec<String> {
+    let s = symbol.trim().to_uppercase();
+    vec![
+        format!("105.{}", s),
+        format!("106.{}", s),
+        format!("107.{}", s),
+    ]
+}
+
+/// 强制 Yahoo 渠道：美股/加密直连，A股/港股映射 symbol 后走 Yahoo。
+async fn fetch_via_yahoo(
     client: &reqwest::Client,
     symbol: &str,
     start: &str,
     end: &str,
 ) -> Result<Vec<OhlcvRow>, String> {
     match detect_market(symbol) {
-        Market::US => us::fetch_us_ohlcv(client, symbol, start, end).await,
-        Market::Crypto => crypto::fetch_crypto_ohlcv(client, symbol, start, end).await,
+        Market::US | Market::Crypto => us::fetch_us_ohlcv(client, symbol, start, end).await,
+        Market::CNStock => {
+            let yahoo_sym = cn_to_yahoo_symbol(symbol);
+            us::fetch_us_ohlcv(client, &yahoo_sym, start, end).await
+        }
+        Market::HKStock => {
+            let yahoo_sym = hk_to_yahoo_symbol(symbol);
+            us::fetch_us_ohlcv(client, &yahoo_sym, start, end).await
+        }
+    }
+}
+
+/// 强制东方财富渠道：美股走备用通道，A股/港股走默认，加密货币不支持。
+async fn fetch_via_eastmoney(
+    client: &reqwest::Client,
+    symbol: &str,
+    start: &str,
+    end: &str,
+) -> Result<Vec<OhlcvRow>, String> {
+    match detect_market(symbol) {
+        Market::US => us_em::fetch_us_ohlcv_eastmoney(client, symbol, start, end).await,
         Market::CNStock => cn::fetch_cn_ohlcv(client, symbol, start, end).await,
         Market::HKStock => hk::fetch_hk_ohlcv(client, symbol, start, end).await,
+        Market::Crypto => Err(format!(
+            "东方财富暂不支持加密货币行情({}): 请改用 --source yahoo 或省略 --source",
+            symbol
+        )),
+    }
+}
+
+/// 统一 OHLCV 数据获取入口。
+///
+/// `source` 为 None 时按 symbol 自动检测市场并走默认渠道
+/// （美股/加密 → Yahoo，A股/港股 → 东方财富）；
+/// 指定 `--source` 时强制走对应渠道。
+pub async fn fetch_ohlcv(
+    client: &reqwest::Client,
+    symbol: &str,
+    start: &str,
+    end: &str,
+    source: Option<Source>,
+) -> Result<Vec<OhlcvRow>, String> {
+    match source {
+        Some(Source::Yahoo) => fetch_via_yahoo(client, symbol, start, end).await,
+        Some(Source::Eastmoney) => fetch_via_eastmoney(client, symbol, start, end).await,
+        None => match detect_market(symbol) {
+            Market::US => us::fetch_us_ohlcv(client, symbol, start, end).await,
+            Market::Crypto => crypto::fetch_crypto_ohlcv(client, symbol, start, end).await,
+            Market::CNStock => cn::fetch_cn_ohlcv(client, symbol, start, end).await,
+            Market::HKStock => hk::fetch_hk_ohlcv(client, symbol, start, end).await,
+        },
     }
 }
 
@@ -188,5 +279,30 @@ mod tests {
     fn test_parse_eastmoney_klines_empty() {
         let rows = parse_eastmoney_klines(&[], None);
         assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn test_cn_to_yahoo_symbol() {
+        assert_eq!(cn_to_yahoo_symbol("600519"), "600519.SS");
+        assert_eq!(cn_to_yahoo_symbol("000858"), "000858.SZ");
+        assert_eq!(cn_to_yahoo_symbol("300750"), "300750.SZ");
+    }
+
+    #[test]
+    fn test_hk_to_yahoo_symbol() {
+        assert_eq!(hk_to_yahoo_symbol("0700.HK"), "0700.HK");
+        assert_eq!(hk_to_yahoo_symbol("00700.HK"), "0700.HK");
+        assert_eq!(hk_to_yahoo_symbol("09988"), "9988.HK");
+        assert_eq!(hk_to_yahoo_symbol("9988.HK"), "9988.HK");
+    }
+
+    #[test]
+    fn test_us_eastmoney_secids() {
+        assert_eq!(
+            us_eastmoney_secids("AAPL"),
+            vec!["105.AAPL", "106.AAPL", "107.AAPL"]
+        );
+        // 去空白 + 大写化
+        assert_eq!(us_eastmoney_secids(" aapl ")[0], "105.AAPL");
     }
 }

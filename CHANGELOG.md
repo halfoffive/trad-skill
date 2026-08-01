@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-08-01
+
+### Added
+
+- **`stock --source yahoo|eastmoney` channel flag**: override the auto-detected data channel. `--source eastmoney` routes US stocks through a new Eastmoney push2his channel (tries secid `105`/`106`/`107` = NASDAQ/NYSE/AMEX) — the workaround for regions where Yahoo Finance is blocked. `--source yahoo` forces Yahoo (A-share/HK symbols are mapped to `.SS`/`.SZ`/`.HK`). New module `market/us_em.rs`; routing helpers in `market/mod.rs`.
+- **A-share + channel examples in docs**: `README.md` / `README_CN.md` data-tool sections and `SKILL.md §6` now show `stock --symbol 600519` and `stock --symbol AAPL --source eastmoney`; `references/data-sources.md` documents the channel-selection matrix.
+- **AGENTS.md "Git workflow" section**: codifies branch-first, batched Conventional Commits, keeping AGENTS/README/CHANGELOG in sync, gating before push, and opening a PR for user review.
+- **Tests**: offline unit tests for `parse_yahoo_response` error paths (incl. the former "未知错误" case), crumb URL-encoding, and the symbol→Yahoo / US-Eastmoney secid routing helpers; plus `#[ignore]`d live network tests for the Yahoo and Eastmoney AAPL paths (`cargo test -- --ignored`).
+
+### Fixed
+
+- **Yahoo Finance "未知错误" from datacenter/cloud IPs** (e.g. the reported Korean Alibaba Cloud server): `market/us.rs` now performs the yfinance cookie + **crumb** handshake (new `get_crumb`), sends a realistic **browser User-Agent** on every Yahoo request, and uses the `query2` endpoint. A direct request is tried first; an empty / `chart.error=null` response (the exact "未知错误" symptom) now triggers the crumb retry instead of surfacing a bare error.
+- **Clearer Yahoo errors**: `parse_yahoo_response` reports the Yahoo error `code` / `description` when present instead of "未知错误", and the empty-result / final-failure messages point users to `--source eastmoney`.
+- reqwest gains the `cookies` feature and the shared client enables `cookie_store` (required for the crumb handshake). Pure-Rust deps only; all 7 build targets unaffected.
+
+### Changed
+
+- `market::fetch_ohlcv` takes an extra `source: Option<Source>` parameter; `OhlcvRow` derives `Debug, Clone, PartialEq`.
+- `http::get_with_retry` delegates to a new header-aware `get_with_retry_headers` (so Yahoo can override the UA while keeping retry/backoff).
+- HTTP user-agent updated to `trad-skill/1.8.0`.
+
+### Notes
+
+- `package.json` `version`: `1.7.0` → `1.8.0` (+ its 5 `optionalDependencies` `@trad-skill/*` pins).
+- `crates/trad-data/Cargo.toml` `version`: `1.7.0` → `1.8.0`.
+- All 5 `npm/<platform>/package.json` `version`: `1.7.0` → `1.8.0`.
+
 ## [1.7.0] - 2026-08-01
 
 ### Added

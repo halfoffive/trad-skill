@@ -265,6 +265,13 @@ bunx trad-skill@latest stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 -
 # 或用绝对路径调用（代理实际调用方式）：
 ~/.agents/skills/tradingagents-analysis/bin/<platform>/trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
+# A股：直接使用 6 位代码（自动路由到东方财富）
+trad-skill stock --symbol 600519 --tail 30
+
+# 显式指定数据渠道——例如所在地区无法访问 Yahoo Finance（报 "未知错误" / 403）时，
+# 把美股改走东方财富通道：
+trad-skill stock --symbol AAPL --source eastmoney
+
 # 获取新闻（默认 --limit 8，摘要截断）
 trad-skill news --symbol AAPL --days 7 --limit 8
 
@@ -277,10 +284,12 @@ trad-skill sentiment --symbol AAPL --limit 15
 
 | 子命令 | 默认值（紧凑） | 扩展参数 |
 |---|---|---|
-| `stock` | `--tail 30` + `--indicators` 开启 | `--stats`, `--raw` |
+| `stock` | `--tail 30` + `--indicators` 开启 | `--stats`, `--raw`, `--source yahoo\|eastmoney` |
 | `news` | `--limit 8`，200字符摘要 | `--limit N`, `--days N` |
 | `fundamentals` | 精简关键指标表 | — |
 | `sentiment` | `--limit 15`，8条消息/帖子 | `--limit N` |
+
+`stock --source` 用于选择数据渠道：默认按 symbol 自动识别——美股/加密货币走 Yahoo Finance，A股/港股走东方财富。传 `--source eastmoney` 可把美股改走东方财富（适用于 Yahoo 被区域封锁的场景）；传 `--source yahoo` 可强制走 Yahoo（A股/港股代码会映射为 `.SS`/`.SZ`/`.HK`）。东方财富不提供加密货币行情。
 
 `trad-skill` 是**主要**数据源，优先尝试。它不是硬性依赖：当某个子命令执行失败或数据源不可用时，代理**仅对子命令未能提供的部分**回退到网络搜索/浏览器工具——绝不跳过二进制直接用网页搜索。
 

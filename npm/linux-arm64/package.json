@@ -1,6 +1,6 @@
 {
   "name": "@trad-skill/linux-arm64",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "trad-skill binary for Linux ARM64 (musl, statically linked)",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "git+https://github.com/halfoffive/trad-skill.git" },

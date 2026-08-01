@@ -257,6 +257,13 @@ bunx trad-skill@latest stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 -
 # Or by absolute path (how the agent invokes them):
 ~/.agents/skills/tradingagents-analysis/bin/<platform>/trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats
 
+# China A-share: use the 6-digit code directly (auto-routed to Eastmoney)
+trad-skill stock --symbol 600519 --tail 30
+
+# Pick a data channel explicitly — e.g. route US stocks via Eastmoney when Yahoo
+# Finance is blocked in your region (returns "未知错误" / 403):
+trad-skill stock --symbol AAPL --source eastmoney
+
 # Fetch news (default --limit 8 per source, summaries truncated)
 trad-skill news --symbol AAPL --days 7 --limit 8
 
@@ -269,10 +276,12 @@ trad-skill sentiment --symbol AAPL --limit 15
 
 | Subcommand | Defaults (compact) | Expand flags |
 |---|---|---|
-| `stock` | `--tail 30` + `--indicators` on | `--stats`, `--raw` |
+| `stock` | `--tail 30` + `--indicators` on | `--stats`, `--raw`, `--source yahoo\|eastmoney` |
 | `news` | `--limit 8`, 200-char summaries | `--limit N`, `--days N` |
 | `fundamentals` | compact key-metrics table | — |
 | `sentiment` | `--limit 15`, 8 messages/posts shown | `--limit N` |
+
+`stock --source` selects the data channel: by default US/Crypto use Yahoo Finance and A-shares/HK use Eastmoney, auto-detected from the symbol. Pass `--source eastmoney` to route US stocks through Eastmoney (handy when Yahoo is region-blocked), or `--source yahoo` to force Yahoo (A-share/HK symbols are mapped to `.SS`/`.SZ`/`.HK`). Eastmoney does not serve crypto.
 
 `trad-skill` is the **primary** data source and is tried first. It is not a hard dependency in the sense that, if a subcommand errors or a source is unavailable, the agent falls back to web search / browser tools **only for the parts the command could not provide** — it never skips the binary outright.
 

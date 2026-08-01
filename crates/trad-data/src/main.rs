@@ -67,6 +67,9 @@ enum Commands {
         no_stats: bool,
         #[arg(long, default_value_t = false)]
         raw: bool,
+        /// 数据渠道：yahoo | eastmoney（默认按市场自动选择）
+        #[arg(long, value_enum)]
+        source: Option<market::Source>,
     },
     /// 获取基本面数据 (兼容 fetch_fundamentals.py)
     Fundamentals {
@@ -139,6 +142,7 @@ async fn main() -> anyhow::Result<()> {
             stats,
             no_stats,
             raw,
+            source,
         }) => {
             let use_indicators = indicators && !no_indicators;
             let use_stats = stats && !no_stats;
@@ -154,7 +158,7 @@ async fn main() -> anyhow::Result<()> {
 
             if raw {
                 // --raw 模式：纯 CSV 输出
-                match market::fetch_ohlcv(&client, &symbol, &start_date, &end_date).await {
+                match market::fetch_ohlcv(&client, &symbol, &start_date, &end_date, source).await {
                     Ok(data) => {
                         if data.is_empty() {
                             eprintln!("错误: 未获取到 {} 的数据", symbol);
@@ -169,7 +173,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             } else {
                 // 默认模式：精简报告（指标 + 尾部 OHLCV）
-                match market::fetch_ohlcv(&client, &symbol, &start_date, &end_date).await {
+                match market::fetch_ohlcv(&client, &symbol, &start_date, &end_date, source).await {
                     Ok(data) => {
                         let opts = format::ReportOptions {
                             tail,
