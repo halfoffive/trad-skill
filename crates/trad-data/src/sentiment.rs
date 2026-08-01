@@ -391,6 +391,7 @@ fn format_org_participation_table(data: &[Value]) -> String {
 ///
 /// 自动检测市场类型：
 /// - A股（6位纯数字）→ 千股千评 + 机构参与度
+/// - 港股（.HK / 5位数字）→ 暂不支持（StockTwits/Reddit 仅覆盖美股，东方财富未覆盖港股）
 /// - 其他 → StockTwits + Reddit（并行获取）
 ///
 /// 契约：永不 panic，错误以字符串形式返回
@@ -403,6 +404,14 @@ pub async fn fetch_sentiment(client: &Client, symbol: &str, limit: u32) -> Strin
     let market = detect_market(symbol);
     match market {
         Market::CNStock => fetch_cn_sentiment(client, symbol).await,
+        Market::HKStock => {
+            // 港股：StockTwits/Reddit 仅覆盖美股，东方财富千股千评/机构参与度未覆盖港股，
+            // 不发起无效请求，直接给出明确提示。
+            format!(
+                "# {} 综合情绪分析报告\n\n## 市场情绪\n\n> 港股情绪数据暂不支持：StockTwits/Reddit 仅覆盖美股，东方财富千股千评/机构参与度未覆盖港股。\n> 若该股有美股对应代码（如 9988.HK -> BABA），可用该美股代码查询情绪。\n",
+                symbol
+            )
+        }
         _ => {
             // 美股/其他：并行获取 StockTwits + Reddit
             let (stocktwits_result, reddit_result) = tokio::join!(
