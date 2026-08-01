@@ -84,6 +84,17 @@ When adding/removing targets, update: `.github/workflows/ci.yml`, `.github/workf
 - Update `CHANGELOG.md` before release.
 - Push tag `vX.Y.Z` to trigger the release workflow (`.github/workflows/release.yml`). CI builds the same 7 binaries; the `install` subcommand ships with them — no new artifacts.
 
+## Git workflow (required for every change)
+
+Follow this flow for any code or docs change (see [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming and Conventional Commits):
+
+1. **Branch first.** Never commit directly to `main`. Cut a branch off `main` (`feat/<slug>`, `fix/<slug>`, `docs/<slug>`, etc.) and do all work there.
+2. **Commit in batches.** Split the work into several small, logical Conventional Commits (e.g. `fix(rust): ...`, `feat(rust): ...`, `docs: ...`, `chore(release): ...`) rather than one giant commit.
+3. **Keep docs in sync.** In the same change, update `AGENTS.md`, `README.md` / `README_CN.md` (kept in parity), and `CHANGELOG.md` whenever behavior, flags, or conventions change. A code change without its doc update is incomplete.
+4. **Gate before push.** Run `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test` (from `crates/trad-data/`) and confirm they pass before pushing.
+5. **Push last.** Only push the branch after the local gates pass (`git push -u origin <branch>`).
+6. **Open a PR for review.** Open a Pull Request against `main` and **request the user's review** before merging. Do not self-merge. Squash-merge per CONTRIBUTING.md.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the branching model (GitHub Flow), Conventional Commits conventions, PR checklist, and the release 7-file version-bump procedure.
