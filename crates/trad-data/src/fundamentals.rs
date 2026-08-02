@@ -116,7 +116,8 @@ async fn fetch_us_fundamentals(client: &Client, symbol: &str) -> String {
     let modules = "assetProfile,financialData,defaultKeyStats,price,summaryDetail";
     let url = format!(
         "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{}?modules={}",
-        symbol, modules
+        crate::http::url_encode(symbol),
+        modules
     );
 
     let resp_text = match yahoo_get_body(client, &url).await {
@@ -262,10 +263,11 @@ async fn fetch_us_financial_table(client: &Client, symbol: &str) -> String {
     let now = chrono::Utc::now();
     let period2 = now.timestamp();
     let period1 = (now - chrono::Duration::days(365 * 5)).timestamp();
+    let encoded = crate::http::url_encode(symbol);
     let url = format!(
         "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{}?symbol={}&type={}&period1={}&period2={}",
-        symbol,
-        symbol,
+        encoded,
+        encoded,
         types.join(","),
         period1,
         period2
@@ -492,7 +494,8 @@ async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> S
 
 /// 获取A股基本面数据（东方财富 API）
 async fn fetch_cn_fundamentals(client: &Client, symbol: &str) -> String {
-    let market_id = if symbol.starts_with('6') { "1" } else { "0" };
+    // 6xx/9xx（含 900xxx 沪B）→ 沪市(1)，与行情通道 cn.rs 保持一致
+    let market_id = crate::market::cn_market_id(symbol).to_string();
     fetch_eastmoney_fundamentals(
         client,
         &EastmoneyParams {

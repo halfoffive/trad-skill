@@ -7,6 +7,15 @@ use reqwest::Client;
 /// 东方财富美股接口与 A股/港股同源（push2his），secid 前缀：
 /// 105=NASDAQ, 106=NYSE, 107=AMEX。无交易所映射时依次尝试三个前缀，
 /// 取第一个返回非空 klines 的结果。
+/// 响应自带 market 字段（请求的交易所）时须与请求前缀一致；字段缺失时信任数据
+/// （保持旧行为）。防止同名代码在多个交易所是不同的公司时静默取错公司。
+fn market_matches(resp_market: Option<i64>, expected: Option<i64>) -> bool {
+    match (resp_market, expected) {
+        (Some(rm), Some(em)) => rm == em,
+        _ => true,
+    }
+}
+
 pub async fn fetch_us_ohlcv_eastmoney(
     client: &Client,
     symbol: &str,
@@ -18,8 +27,12 @@ pub async fn fetch_us_ohlcv_eastmoney(
 
     let mut last_err = String::new();
     for secid in super::us_eastmoney_secids(symbol) {
+        let expected_market = secid.split('.').next().and_then(|p| p.parse::<i64>().ok());
         match fetch_one(client, &secid, &beg, &end_fmt).await {
-            Ok(rows) if !rows.is_empty() => return Ok(rows),
+            // 响应市场与请求前缀不符 → 命中的是另一交易所的同名代码，继续尝试下一个
+            Ok((rows, m)) if !rows.is_empty() && market_matches(m, expected_market) => {
+                return Ok(rows);
+            }
             Ok(_) => last_err = format!("东方财富美股返回空数据({})", symbol),
             Err(e) => last_err = e,
         }
@@ -32,12 +45,13 @@ pub async fn fetch_us_ohlcv_eastmoney(
 
 /// 单个 secid 的抓取。secid 无效时东方财富返回 `data:null`，
 /// 此时返回空 Vec（而非 Err），让上层尝试下一个交易所前缀。
+/// 同时返回响应的 `market` 字段（所属交易所），供上层做同名代码的交易所一致性校验。
 async fn fetch_one(
     client: &Client,
     secid: &str,
     beg: &str,
     end_fmt: &str,
-) -> Result<Vec<OhlcvRow>, String> {
+) -> Result<(Vec<OhlcvRow>, Option<i64>), String> {
     let url = format!(
         "https://push2his.eastmoney.com/api/qt/stock/kline/get?\
          fields1=f1,f2,f3,f4,f5,f6\
@@ -60,14 +74,15 @@ async fn fetch_one(
     let root: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))?;
 
-    let klines = root
-        .get("data")
+    let data = root.get("data");
+    let market = data.and_then(|d| d.get("market")).and_then(|m| m.as_i64());
+    let klines = data
         .and_then(|d| d.get("klines"))
         .and_then(|k| k.as_array());
 
     match klines {
-        Some(k) => Ok(parse_eastmoney_klines(k, None)),
-        None => Ok(Vec::new()),
+        Some(k) => Ok((parse_eastmoney_klines(k, None), market)),
+        None => Ok((Vec::new(), market)),
     }
 }
 

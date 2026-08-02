@@ -126,7 +126,7 @@ async fn fetch_yfinance_news(client: &Client, symbol: &str, days: u32, limit: u3
     let days = days.max(1);
     let url = format!(
         "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=news",
-        symbol
+        crate::http::url_encode(symbol)
     );
 
     let resp_text = match yahoo_get_body(client, &url).await {

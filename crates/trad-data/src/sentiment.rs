@@ -23,7 +23,7 @@ const REDDIT_POST_DISPLAY: usize = 8;
 async fn fetch_stocktwits(client: &Client, symbol: &str, limit: u32) -> String {
     let url = format!(
         "https://api.stocktwits.com/api/2/streams/symbol/{}.json",
-        symbol
+        crate::http::url_encode(symbol)
     );
 
     let resp = match get_with_retry(client, &url, Some(1)).await {
@@ -119,14 +119,19 @@ async fn fetch_subreddit(
 ) -> Vec<RedditPost> {
     let url = format!(
         "https://www.reddit.com/r/{}/search.json?q={}&sort=new&t={}&limit=10",
-        subreddit, symbol, time_filter
+        subreddit,
+        crate::http::url_encode(symbol),
+        time_filter
     );
 
-    let resp = match client
-        .get(&url)
-        .header("User-Agent", "TradingAgents-Skill/1.0")
-        .send()
-        .await
+    // Reddit 对通用 UA 越来越严，且偶发 429：走共享重试 + 浏览器 UA。
+    let resp = match crate::http::get_with_retry_headers(
+        client,
+        &url,
+        &[("User-Agent", crate::yahoo::BROWSER_UA)],
+        Some(1),
+    )
+    .await
     {
         Ok(r) if r.status().is_success() => r,
         _ => return Vec::new(),

@@ -24,22 +24,36 @@ pub async fn get_crumb(client: &Client) -> Option<String> {
         .send()
         .await;
 
-    let resp = client
-        .get("https://query2.finance.yahoo.com/v1/test/getcrumb")
-        .header("User-Agent", BROWSER_UA)
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
+    // getcrumb 偶发 429：退避重试一次
+    for attempt in 0..2 {
+        let resp = client
+            .get("https://query2.finance.yahoo.com/v1/test/getcrumb")
+            .header("User-Agent", BROWSER_UA)
+            .send()
+            .await
+            .ok()?;
+        if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS && attempt == 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            continue;
+        }
+        if !resp.status().is_success() {
+            return None;
+        }
+        let crumb = resp.text().await.ok()?;
+        let crumb = crumb.trim();
+        // 校验：crumb 应为短 ASCII 字母数字串；封锁形态下拿到的是 HTML/超长垃圾，
+        // 直接视为失败，避免把垃圾串拼进重试 URL 保证失败。
+        if !crumb.is_empty()
+            && crumb.len() <= 64
+            && crumb
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+        {
+            return Some(crumb.to_string());
+        }
         return None;
     }
-    let crumb = resp.text().await.ok()?;
-    let crumb = crumb.trim();
-    if crumb.is_empty() {
-        None
-    } else {
-        Some(crumb.to_string())
-    }
+    None
 }
 
 /// 给 URL 追加 crumb 查询参数（自动判断分隔符 `?` / `&`）。
@@ -48,18 +62,35 @@ pub fn append_crumb(url: &str, crumb: &str) -> String {
     format!("{}{}crumb={}", url, sep, crate::http::url_encode(crumb))
 }
 
+/// 检测 Yahoo HTTP 200 + 错误体形态（缺 crumb / 区域封锁的典型响应，
+/// 如 `{"finance":{"error":{"code":"Unauthorized"}}}`，或非 JSON 的验证/封锁页）。
+fn body_has_yahoo_error(body: &str) -> bool {
+    let Ok(root) = serde_json::from_str::<serde_json::Value>(body) else {
+        // HTTP 200 但非 JSON（HTML 验证页等）也视为需 crumb 重试
+        return true;
+    };
+    ["finance", "quoteSummary"].iter().any(|k| {
+        root.get(k)
+            .and_then(|o| o.get("error"))
+            .is_some_and(|e| !e.is_null())
+    })
+}
+
 /// 带 crumb 握手的 Yahoo GET，返回响应 body 文本。
 ///
-/// 先直连（浏览器 UA）；若 HTTP 层失败（如 401 / 403），取 crumb 后重试。
-/// 适用于 quoteSummary 等 "HTTP 层失败" 的端点。chart 端点因存在
-/// "HTTP 200 但空数据" 的封锁形态，由 `market/us.rs` 自行处理重试。
+/// 先直连（浏览器 UA）；HTTP 层失败（401/403/5xx/传输错误）或
+/// HTTP 200 但 body 内嵌 finance/quoteSummary 错误（缺 crumb 的典型形态）
+/// 时取 crumb 后重试。chart 端点另有 "HTTP 200 但空数据" 形态，
+/// 由 `market/us.rs` 自行处理重试。
 pub async fn yahoo_get_body(client: &Client, url: &str) -> Result<String, String> {
     // 第一步：直连（无 crumb）。
     if let Ok(resp) =
         get_with_retry_headers(client, url, &[("User-Agent", BROWSER_UA)], Some(2)).await
     {
         if let Ok(body) = resp.text().await {
-            return Ok(body);
+            if !body_has_yahoo_error(&body) {
+                return Ok(body);
+            }
         }
     }
 
@@ -80,6 +111,29 @@ pub async fn yahoo_get_body(client: &Client, url: &str) -> Result<String, String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_body_has_yahoo_error() {
+        // finance 错误体（缺 crumb 的典型响应）→ 需重试
+        assert!(body_has_yahoo_error(
+            r#"{"finance":{"error":{"code":"Unauthorized"}}}"#
+        ));
+        // quoteSummary 错误体
+        assert!(body_has_yahoo_error(
+            r#"{"quoteSummary":{"error":{"code":"Not Found"}}}"#
+        ));
+        // 错误为 null → 正常数据
+        assert!(!body_has_yahoo_error(
+            r#"{"finance":{"result":[]},"finance.error":null}"#
+        ));
+        assert!(!body_has_yahoo_error(
+            r#"{"quoteSummary":{"result":[{}],"error":null}}"#
+        ));
+        // 正常 JSON
+        assert!(!body_has_yahoo_error(r#"{"foo":1}"#));
+        // 非 JSON（HTML 封锁页）→ 需重试
+        assert!(body_has_yahoo_error("<!DOCTYPE html><html>captcha</html>"));
+    }
 
     #[test]
     fn test_append_crumb() {

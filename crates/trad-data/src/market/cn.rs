@@ -14,9 +14,9 @@ pub async fn fetch_cn_ohlcv(
     start: &str,
     end: &str,
 ) -> Result<Vec<OhlcvRow>, String> {
-    // 判断市场：6开头=沪市(1), 其他=深市(0)
-    let market = if symbol.starts_with('6') { 1 } else { 0 };
-    // 日期转为 YYYYMMDD 格式
+    // 判断市场：6xx/9xx（含 900xxx 沪B）→ 沪市(1)，其余（深市 0x/2x/3x、北交所 8xx/92x）→ 0
+    let market = crate::market::cn_market_id(symbol);
+    // 日期转为 YYYYMMDD 格式（main 已统一校验 YYYY-MM-DD）
     let beg = start.replace('-', "");
     let end_fmt = end.replace('-', "");
 
@@ -55,5 +55,14 @@ pub async fn fetch_cn_ohlcv(
             )
         })?;
 
-    Ok(parse_eastmoney_klines(klines, None))
+    // A股成交量单位是手（1 手 = 100 股），统一换算为股，与 Yahoo 渠道（股）对齐，
+    // 否则默认渠道（东方财富）的成交量比 Yahoo 渠道系统性小 100 倍。
+    let rows = parse_eastmoney_klines(klines, None);
+    Ok(rows
+        .into_iter()
+        .map(|mut r| {
+            r.volume *= 100.0;
+            r
+        })
+        .collect())
 }
