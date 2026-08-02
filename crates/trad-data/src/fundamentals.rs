@@ -589,8 +589,17 @@ fn build_cn_financial_table(data: &[Value]) -> String {
 /// - 6位纯数字 → A股
 /// - 其他 → 美股
 ///
-/// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_fundamentals(client: &Client, symbol: &str) -> String {
+/// 契约：永不 panic，错误以 Err(String) 返回（调用方不再靠字符串前缀探测错误）。
+pub async fn fetch_fundamentals(client: &Client, symbol: &str) -> Result<String, String> {
+    let out = fetch_fundamentals_inner(client, symbol).await;
+    if out.starts_with("错误") {
+        Err(out)
+    } else {
+        Ok(out)
+    }
+}
+
+async fn fetch_fundamentals_inner(client: &Client, symbol: &str) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();
@@ -614,8 +623,9 @@ mod tests {
     #[ignore = "hits the live Yahoo Finance API"]
     async fn test_live_fundamentals_aapl() {
         let client = crate::http::build_client().unwrap();
-        let out = fetch_fundamentals(&client, "AAPL").await;
-        assert!(!out.starts_with("错误"), "AAPL 基本面不应报错: {}", out);
+        let out = fetch_fundamentals(&client, "AAPL")
+            .await
+            .unwrap_or_else(|e| panic!("AAPL 基本面不应报错: {}", e));
         assert!(out.contains("公司概况"), "应包含公司概况段落");
     }
 
@@ -624,8 +634,9 @@ mod tests {
     #[ignore = "hits the live Eastmoney API"]
     async fn test_live_fundamentals_cn() {
         let client = crate::http::build_client().unwrap();
-        let out = fetch_fundamentals(&client, "600519").await;
-        assert!(!out.starts_with("错误"), "600519 基本面不应报错: {}", out);
+        let out = fetch_fundamentals(&client, "600519")
+            .await
+            .unwrap_or_else(|e| panic!("600519 基本面不应报错: {}", e));
         assert!(out.contains("个股基本信息"), "应包含个股基本信息段落");
     }
 
@@ -766,8 +777,9 @@ mod tests {
     #[ignore = "hits the live Eastmoney API"]
     async fn test_live_fundamentals_hk() {
         let client = crate::http::build_client().unwrap();
-        let out = fetch_fundamentals(&client, "0700.HK").await;
-        assert!(!out.starts_with("错误"), "0700.HK 基本面不应报错: {}", out);
+        let out = fetch_fundamentals(&client, "0700.HK")
+            .await
+            .unwrap_or_else(|e| panic!("0700.HK 基本面不应报错: {}", e));
         assert!(out.contains("个股基本信息"), "应包含个股基本信息段落");
         assert!(out.contains("港股基本面"), "应走港股东方财富通道而非 Yahoo");
     }

@@ -500,8 +500,22 @@ fn strip_jsonp(text: &str) -> String {
 /// - 港股（.HK / 5位数字）→ 东方财富新闻（5位代码），失败降级 Google News 中文
 /// - 其他 → Yahoo Finance 新闻 + Google News，并行获取后合并输出
 ///
-/// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_news(client: &Client, symbol: &str, days: u32, limit: u32) -> String {
+/// 契约：永不 panic，错误以 Err(String) 返回（调用方不再靠字符串前缀探测错误）。
+pub async fn fetch_news(
+    client: &Client,
+    symbol: &str,
+    days: u32,
+    limit: u32,
+) -> Result<String, String> {
+    let out = fetch_news_inner(client, symbol, days, limit).await;
+    if out.starts_with("错误") {
+        Err(out)
+    } else {
+        Ok(out)
+    }
+}
+
+async fn fetch_news_inner(client: &Client, symbol: &str, days: u32, limit: u32) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();

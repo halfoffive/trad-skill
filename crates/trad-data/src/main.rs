@@ -8,7 +8,8 @@ mod news;
 mod sentiment;
 mod yahoo;
 
-use chrono::{Duration, Utc};
+use anyhow::anyhow;
+use chrono::{Duration, Local, NaiveDate};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -134,6 +135,30 @@ impl Cli {
     }
 }
 
+/// 校验并规范化日期范围（YYYY-MM-DD）。
+/// end < start、start 晚于今天、格式非法 → Err（CLI 参数错误，退出码 2）。
+fn validate_date_range(start: &str, end: &str) -> Result<(String, String), String> {
+    let parse = |s: &str| {
+        NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .map_err(|_| format!("日期格式无效（应为 YYYY-MM-DD）：{}", s))
+    };
+    let s = parse(start)?;
+    let e = parse(end)?;
+    if e < s {
+        return Err(format!("--end（{}）早于 --start（{}）", end, start));
+    }
+    if s > Local::now().date_naive() {
+        return Err(format!("--start（{}）晚于今天", start));
+    }
+    Ok((start.to_string(), end.to_string()))
+}
+
+/// 以非零码退出：1 = 取数/网络失败，2 = 参数错误
+fn exit_with(code: i32, msg: &str) -> ! {
+    eprintln!("{}", msg);
+    std::process::exit(code);
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -164,29 +189,32 @@ async fn main() -> anyhow::Result<()> {
             let use_indicators = indicators && !no_indicators;
             let use_stats = stats && !no_stats;
 
-            // 默认日期：end=今天, start=今天往前365天
-            let today = Utc::now().format("%Y-%m-%d").to_string();
+            // 默认日期：end=今天（本地时区，避免 UTC 在凌晨把"今天"算成昨天），
+            // start=今天往前 365 天；再统一校验（格式 / end>=start / 未来日期）。
+            let today = Local::now().format("%Y-%m-%d").to_string();
             let end_date = end.unwrap_or_else(|| today.clone());
             let start_date = start.unwrap_or_else(|| {
-                (Utc::now() - Duration::days(365))
+                (Local::now() - Duration::days(365))
                     .format("%Y-%m-%d")
                     .to_string()
             });
+            let (start_date, end_date) = validate_date_range(&start_date, &end_date)
+                .unwrap_or_else(|e| exit_with(2, &format!("错误: {}", e)));
+
+            // --tail 限制在 [1, 500]，避免 --tail 0 输出空块或巨量输出
+            let tail = tail.clamp(1, 500);
 
             if raw {
                 // --raw 模式：纯 CSV 输出
                 match market::fetch_ohlcv(&client, &symbol, &start_date, &end_date, source).await {
                     Ok(data) => {
                         if data.is_empty() {
-                            eprintln!("错误: 未获取到 {} 的数据", symbol);
+                            exit_with(1, &format!("错误: 未获取到 {} 的数据", symbol));
                         } else {
                             print!("{}", format::ohlcv_to_csv(&data));
                         }
                     }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        std::process::exit(1);
-                    }
+                    Err(e) => exit_with(1, &e),
                 }
             } else {
                 // 默认模式：精简报告（指标 + 尾部 OHLCV）
@@ -206,46 +234,45 @@ async fn main() -> anyhow::Result<()> {
                         );
                         print!("{}", report);
                     }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        std::process::exit(1);
-                    }
+                    Err(e) => exit_with(1, &e),
                 }
             }
         }
         Some(Commands::Fundamentals { symbol }) => {
-            let result = fundamentals::fetch_fundamentals(&client, &symbol).await;
-            if result.starts_with("错误") {
-                eprintln!("{}", result);
-                std::process::exit(1);
+            match fundamentals::fetch_fundamentals(&client, &symbol).await {
+                Ok(out) => println!("{}", out),
+                Err(e) => exit_with(1, &e),
             }
-            println!("{}", result);
         }
         Some(Commands::News {
             symbol,
             days,
             limit,
         }) => {
-            let result = news::fetch_news(&client, &symbol, days, limit).await;
-            if result.starts_with("错误") {
-                eprintln!("{}", result);
-                std::process::exit(1);
+            if limit == 0 {
+                exit_with(2, "错误: --limit 必须 ≥ 1");
             }
-            println!("{}", result);
+            match news::fetch_news(&client, &symbol, days, limit).await {
+                Ok(out) => println!("{}", out),
+                Err(e) => exit_with(1, &e),
+            }
         }
         Some(Commands::Sentiment {
             symbol,
             limit,
             days,
         }) => {
-            let result = sentiment::fetch_sentiment(&client, &symbol, limit, days).await;
-            if result.starts_with("错误") {
-                eprintln!("{}", result);
-                std::process::exit(1);
+            if limit == 0 {
+                exit_with(2, "错误: --limit 必须 ≥ 1");
             }
-            println!("{}", result);
+            match sentiment::fetch_sentiment(&client, &symbol, limit, days).await {
+                Ok(out) => println!("{}", out),
+                Err(e) => exit_with(1, &e),
+            }
         }
-        Some(Commands::Install { .. }) | None => unreachable!(),
+        Some(Commands::Install { .. }) | None => {
+            return Err(anyhow!("内部错误：安装流程不应进入数据分发路径"));
+        }
     }
 
     Ok(())
