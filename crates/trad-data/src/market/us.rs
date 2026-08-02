@@ -84,11 +84,13 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
 
     let mut rows = Vec::new();
     for (i, ts_val) in timestamps.iter().enumerate() {
-        // 提取时间戳并转为日期字符串
-        let ts = ts_val.as_i64().unwrap_or(0);
-        let date = chrono::DateTime::from_timestamp(ts, 0)
-            .map(|dt| dt.format("%Y-%m-%d").to_string())
-            .unwrap_or_default();
+        // 提取时间戳并转为日期字符串。
+        // ts 非 i64（null/异常）或时间戳非法时跳过该行，避免生成 1970-01-01 假数据。
+        let Some(ts) = ts_val.as_i64() else { continue };
+        let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) else {
+            continue;
+        };
+        let date = dt.format("%Y-%m-%d").to_string();
 
         // 辅助函数：从 JSON 数组中取 f64 值，null 则跳过
         let get_f64 =
@@ -165,7 +167,10 @@ pub async fn fetch_us_ohlcv(
     end: &str,
 ) -> Result<Vec<OhlcvRow>, String> {
     let period1 = date_to_unix(start)?;
-    let period2 = date_to_unix(end)?;
+    // Yahoo 的 period2 是排他上界（timestamp < period2），而日线时间戳为当天 00:00 UTC。
+    // 若直接用 end 当天 00:00 作 period2，会漏掉 end 当天的 K 线（默认 --end today 则丢当天）。
+    // 加 1 天让端点包含在内，与东方财富通道（含端点）行为一致。
+    let period2 = date_to_unix(end)? + 86_400;
 
     // 第一步：直连（无 crumb）。非空结果直接返回。
     if let Ok(rows) = fetch_yahoo_chart(client, symbol, period1, period2, None).await {
@@ -265,6 +270,31 @@ mod tests {
         }"#;
         let rows = parse_yahoo_response("AAPL", body).unwrap();
         assert_eq!(rows.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_yahoo_skips_null_timestamp() {
+        // timestamp 为 null 的行应跳过，而非生成 1970-01-01 假数据
+        let body = r#"{
+            "chart": {
+                "result": [{
+                    "timestamp": [null, 1704240000],
+                    "indicators": {
+                        "quote": [{
+                            "open": [100.0, 101.0],
+                            "high": [102.0, 103.0],
+                            "low": [99.0, 100.0],
+                            "close": [101.0, 102.0],
+                            "volume": [5000, 6000]
+                        }]
+                    }
+                }],
+                "error": null
+            }
+        }"#;
+        let rows = parse_yahoo_response("AAPL", body).unwrap();
+        assert_eq!(rows.len(), 1, "null timestamp 行应被跳过");
+        assert_eq!(rows[0].date, "2024-01-03");
     }
 
     // 真实网络集成测试：默认不进 CI，手动 `cargo test -- --ignored` 运行。
