@@ -189,12 +189,18 @@ pub fn compute_indicators(data: &[OhlcvRow]) -> String {
     let avg_loss = ema_alpha(&loss, 1.0 / 14.0);
 
     // RSI 计算：处理 avg_loss == 0 的边缘情况
+    // avg_gain==0 && avg_loss==0（价格连续持平）应为中性 50，而非 100；
+    // 仅 avg_loss==0 且有上涨时才是 100（超买）。与下方 MFI 的处理一致。
     let rsi: Vec<f64> = (0..n)
         .map(|i| {
-            if avg_loss[i] == 0.0 {
+            let g = avg_gain[i];
+            let l = avg_loss[i];
+            if g == 0.0 && l == 0.0 {
+                50.0
+            } else if l == 0.0 {
                 100.0
             } else {
-                100.0 - 100.0 / (1.0 + avg_gain[i] / avg_loss[i])
+                100.0 - 100.0 / (1.0 + g / l)
             }
         })
         .collect();
@@ -539,6 +545,24 @@ mod tests {
         assert!(result.contains("技术指标快照"));
         assert!(result.contains("SMA50"));
         assert!(result.contains("RSI(14)"));
+    }
+
+    #[test]
+    fn test_rsi_flat_market_is_neutral() {
+        // 价格完全持平：avg_gain==avg_loss==0，RSI 应为 50（中性），而非 100。
+        let data: Vec<OhlcvRow> = (0..30)
+            .map(|i| row(&format!("2024-01-{:02}", i + 1), 100.0))
+            .collect();
+        let result = compute_indicators(&data);
+        let rsi_line = result
+            .lines()
+            .find(|l| l.contains("RSI(14)"))
+            .expect("应含 RSI 行");
+        assert!(
+            rsi_line.contains("| 50.0000 |"),
+            "持平市场 RSI 应为 50.0000: {}",
+            rsi_line
+        );
     }
 
     #[test]
