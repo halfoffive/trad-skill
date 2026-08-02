@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`sentiment` 新增 `--days`（默认 7）**：控制 Reddit 帖子时间窗（≤7 天按 `week`、>7 天按 `month`）。此前 Reddit 时间窗硬编码 7 天，`--limit` 仅影响 StockTwits。同步更新 `SKILL.md` 与 `README`/`README_CN`。
+
+### Fixed
+
+- **Yahoo `stock` 行情漏掉 `--end` 当天数据**：Yahoo v8 chart 的 `period2` 是排他上界（`timestamp < period2`），而日线时间戳为当天 00:00 UTC，直接用 `end` 当天 00:00 作 `period2` 会漏掉 `end` 当天 K 线（默认 `--end today` 则丢当天）。`period2` 加 1 天让端点包含在内，与东方财富通道（含端点）行为一致。
+- **`get_with_retry` 对不可恢复 4xx 重试浪费数秒**：此前对 400/401/403/404 等也按指数退避重试——Yahoo 401/403 需 crumb、404 无效代码，重试必失败却白等 1–7s。新增 `is_retryable_status`：仅 5xx 与 429 限流重试，4xx 立即失败。新增 `test_is_retryable_status`。
+- **RSI 平价市场返回 100 应为 50**：`avg_loss==0` 时一律返回 100，但价格连续持平（`avg_gain==avg_loss==0`）应为中性 50，与同文件 MFI 的边缘处理一致。新增 `test_rsi_flat_market_is_neutral`。
+- **东方财富 klines 脏字段回落 0.0 污染序列**：`parse_eastmoney_klines` 对 open/close/high/low 解析失败原回落 `0.0`，一根 `close=0` 的 K 线会让收益率/波动率/均线失真。改为关键字段解析失败即跳过该行（成交量仍允许 0）。新增 `test_parse_eastmoney_klines_skip_bad_ohlc`。
+- **Yahoo 解析器对 null 时间戳生成 1970-01-01 假行**：`ts_val` 非 i64 时 `unwrap_or(0)` 产生 1970 行，改为跳过。新增 `test_parse_yahoo_skips_null_timestamp`。
+- **新闻摘要残留 HTML 实体**：`strip_html` 仅删 `<...>` 标签，`&amp;`/`&lt;`/`&quot;`/`&#39;`/`&nbsp;` 原样残留。新增 `decode_html_entities`（命名实体 + 数字实体，未知保留），在剥标签之后调用（先解码会把 `&lt;`/`&gt;` 还原成尖括号被误删）。扩展 `test_strip_html`。
+
+### Changed
+
+- 移除死字段 `ReportOptions.raw`（恒为 false：`--raw` 走 `ohlcv_to_csv` 直连分支，从不经过 `build_compact_report`）及其死分支与 `test_raw_mode`。
+- `bin/trad-skill.js` 移除未使用的 `catch (e)` 形参。
+
 ## [1.8.6] - 2026-08-02
 
 ### Fixed
