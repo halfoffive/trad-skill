@@ -359,7 +359,9 @@ fn build_us_timeseries_table(body: &Value, metrics: &[(&str, &str)]) -> String {
         "| 指标 | {} | YoY(营收/净利) |",
         year_labels.join(" | ")
     ));
-    lines.push(format!("|{}|", "---|".repeat(ncols + 2)));
+    // 分隔行：N 列需 N+1 个 `|`。`"---|".repeat(N)` 末尾已带 `|`，
+    // 故外层只需前导 `|`，再补一个 `|` 会多出尾随 `||` 致列数错位。
+    lines.push(format!("|{}", "---|".repeat(ncols + 2)));
 
     for (display, type_name) in metrics {
         let year_map = by_type.get(*type_name);
@@ -559,7 +561,9 @@ fn build_cn_financial_table(data: &[Value]) -> String {
     let mut lines = Vec::new();
     let header = format!("| 指标 | {} |", periods.join(" | "));
     lines.push(header);
-    lines.push(format!("|{}|", "---|".repeat(ncols + 1)));
+    // 分隔行：N 列需 N+1 个 `|`。`"---|".repeat(N)` 末尾已带 `|`，
+    // 外层再补 `|` 会产生尾随 `||`，使分隔行列数多于表头/数据行。
+    lines.push(format!("|{}", "---|".repeat(ncols + 1)));
 
     for (display, field, kind) in &indicators {
         let mut cells = vec![display.to_string()];
@@ -669,6 +673,15 @@ mod tests {
         assert!(table.contains("272.43亿"), "PARENTNETPROFIT 净利润");
         // 不应再出现整行 N/A（旧错误字段名导致）
         assert!(!table.contains("| 每股收益 | N/A |"));
+        // 分隔行（第二行）`|` 数必须等于表头；修复前多一个尾随 `|` 形如 `|---|---||`。
+        let lines: Vec<&str> = table.lines().collect();
+        let pipes = |s: &str| s.chars().filter(|&c| c == '|').count();
+        assert!(
+            !lines[1].ends_with("||"),
+            "分隔行不应以 || 结尾: {}",
+            lines[1]
+        );
+        assert_eq!(pipes(lines[0]), pipes(lines[1]), "分隔行管道符数应等于表头");
     }
 
     // fmt_num 需解包 Yahoo 的 {fmt, raw} 对象（修复打印原始 JSON 的 bug）。
@@ -737,6 +750,15 @@ mod tests {
         assert!(table.contains("-2.80%"), "营收 YoY");
         // 无 N/A
         assert!(!table.contains("N/A"), "不应有 N/A: {}", table);
+        // 分隔行 `|` 数必须等于表头；修复前多一个尾随 `|` 形如 `|---|---|---|---||`。
+        let lines: Vec<&str> = table.lines().collect();
+        let pipes = |s: &str| s.chars().filter(|&c| c == '|').count();
+        assert!(
+            !lines[1].ends_with("||"),
+            "分隔行不应以 || 结尾: {}",
+            lines[1]
+        );
+        assert_eq!(pipes(lines[0]), pipes(lines[1]), "分隔行管道符数应等于表头");
     }
 
     // 港股基本面走东方财富，国内网络即可达。
