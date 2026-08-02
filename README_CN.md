@@ -278,8 +278,8 @@ trad-skill news --symbol AAPL --days 7 --limit 8
 # 获取基本面（精简关键指标表 + 公司概况）
 trad-skill fundamentals --symbol AAPL
 
-# 获取情绪数据（默认 --limit 15）
-trad-skill sentiment --symbol AAPL --limit 15
+# 获取情绪数据（默认 --limit 15，--days 7 Reddit 时间窗）
+trad-skill sentiment --symbol AAPL --limit 15 --days 7
 
 # A股/港股 基本面/新闻自动走东方财富（无需 Yahoo）：
 trad-skill fundamentals --symbol 600519
@@ -295,7 +295,7 @@ trad-skill news --symbol 0700.HK         # 港股新闻走东方财富
 | `stock` | `--tail 30` + `--indicators` 开启 | `--stats`, `--raw`, `--source yahoo\|eastmoney` |
 | `news` | `--limit 8`，200字符摘要 | `--limit N`, `--days N` |
 | `fundamentals` | 精简关键指标表 | — |
-| `sentiment` | `--limit 15`，8条消息/帖子 | `--limit N` |
+| `sentiment` | `--limit 15`，`--days 7`（Reddit），8条消息/帖子 | `--limit N`, `--days N` |
 
 `stock --source` 用于选择数据渠道：默认按 symbol 自动识别——美股/加密货币走 Yahoo Finance，A股/港股走东方财富。传 `--source eastmoney` 可把美股改走东方财富（适用于 Yahoo 被区域封锁的场景）；传 `--source yahoo` 可强制走 Yahoo（A股/港股代码会映射为 `.SS`/`.SZ`/`.HK`）。东方财富不提供加密货币行情。
 

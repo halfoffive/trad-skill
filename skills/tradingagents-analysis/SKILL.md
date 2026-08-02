@@ -236,7 +236,7 @@ The `trad-skill` Rust binary lives in this skill's `bin/<platform>/` directory. 
 | `trad-skill stock` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). | `trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
 | `trad-skill news` | Company news (US: Yahoo Finance + Google News RSS). Default `--limit 8` per source; all summaries truncated. | `trad-skill news --symbol AAPL --days 7 --limit 8` |
 | `trad-skill fundamentals` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `trad-skill fundamentals --symbol AAPL` |
-| `trad-skill sentiment` | Social sentiment from StockTwits, Reddit. Default `--limit 15`; message/post displays trimmed. | `trad-skill sentiment --symbol AAPL --limit 15` |
+| `trad-skill sentiment` | Social sentiment from StockTwits, Reddit. Default `--limit 15`, `--days 7` (Reddit window); message/post displays trimmed. | `trad-skill sentiment --symbol AAPL --limit 15 --days 7` |
 
 > **China A-share market**: `trad-skill` supports A-share data via Eastmoney APIs. Use 6-digit symbols (e.g. `600519`) directly — e.g. `trad-skill stock --symbol 600519 --tail 30`.
 >

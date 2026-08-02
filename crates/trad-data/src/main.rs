@@ -92,6 +92,10 @@ enum Commands {
         symbol: String,
         #[arg(long, default_value_t = 15)]
         limit: u32,
+        /// Reddit 帖子时间窗（天，默认 7）。仅美股/加密的 Reddit 源生效；
+        /// ≤7 天按 week、>7 天按 month 过滤。
+        #[arg(long, default_value_t = 7)]
+        days: u32,
     },
     /// 安装 tradingagents-analysis 技能（无子命令时的默认行为）
     Install {
@@ -217,8 +221,12 @@ async fn main() -> anyhow::Result<()> {
             }
             println!("{}", result);
         }
-        Some(Commands::Sentiment { symbol, limit }) => {
-            let result = sentiment::fetch_sentiment(&client, &symbol, limit).await;
+        Some(Commands::Sentiment {
+            symbol,
+            limit,
+            days,
+        }) => {
+            let result = sentiment::fetch_sentiment(&client, &symbol, limit, days).await;
             if result.starts_with("错误") {
                 eprintln!("{}", result);
                 std::process::exit(1);

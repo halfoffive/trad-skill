@@ -396,8 +396,9 @@ fn format_org_participation_table(data: &[Value]) -> String {
 /// - 港股（.HK / 5位数字）→ 暂不支持（StockTwits/Reddit 仅覆盖美股，东方财富未覆盖港股）
 /// - 其他 → StockTwits + Reddit（并行获取）
 ///
+/// `days` 控制 Reddit 帖子时间窗（≤7 天按 week、>7 天按 month）。
 /// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_sentiment(client: &Client, symbol: &str, limit: u32) -> String {
+pub async fn fetch_sentiment(client: &Client, symbol: &str, limit: u32, days: u32) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();
@@ -418,7 +419,7 @@ pub async fn fetch_sentiment(client: &Client, symbol: &str, limit: u32) -> Strin
             // 美股/其他：并行获取 StockTwits + Reddit
             let (stocktwits_result, reddit_result) = tokio::join!(
                 fetch_stocktwits(client, symbol, limit),
-                fetch_reddit_sentiment(client, symbol, 7)
+                fetch_reddit_sentiment(client, symbol, days)
             );
 
             let mut sections = Vec::new();
@@ -481,7 +482,7 @@ mod tests {
     #[ignore = "hits the live Eastmoney API"]
     async fn test_live_sentiment_cn() {
         let client = crate::http::build_client().unwrap();
-        let out = fetch_sentiment(&client, "002594", 15).await;
+        let out = fetch_sentiment(&client, "002594", 15, 7).await;
         assert!(out.contains("个股评论"), "应包含个股评论段落");
         // 修复后 综合得分/目前排名/关注指数 不应再全为 N/A
         assert!(

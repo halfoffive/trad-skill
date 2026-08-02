@@ -270,8 +270,8 @@ trad-skill news --symbol AAPL --days 7 --limit 8
 # Fetch fundamentals (compact key-metrics table + company profile)
 trad-skill fundamentals --symbol AAPL
 
-# Fetch sentiment (default --limit 15)
-trad-skill sentiment --symbol AAPL --limit 15
+# Fetch sentiment (default --limit 15, --days 7 Reddit window)
+trad-skill sentiment --symbol AAPL --limit 15 --days 7
 
 # China A-share & HK fundamentals/news auto-route to Eastmoney (no Yahoo required):
 trad-skill fundamentals --symbol 600519
@@ -287,7 +287,7 @@ trad-skill news --symbol 0700.HK         # HK news via Eastmoney
 | `stock` | `--tail 30` + `--indicators` on | `--stats`, `--raw`, `--source yahoo\|eastmoney` |
 | `news` | `--limit 8`, 200-char summaries | `--limit N`, `--days N` |
 | `fundamentals` | compact key-metrics table | — |
-| `sentiment` | `--limit 15`, 8 messages/posts shown | `--limit N` |
+| `sentiment` | `--limit 15`, `--days 7` (Reddit), 8 messages/posts shown | `--limit N`, `--days N` |
 
 `stock --source` selects the data channel: by default US/Crypto use Yahoo Finance and A-shares/HK use Eastmoney, auto-detected from the symbol. Pass `--source eastmoney` to route US stocks through Eastmoney (handy when Yahoo is region-blocked), or `--source yahoo` to force Yahoo (A-share/HK symbols are mapped to `.SS`/`.SZ`/`.HK`). Eastmoney does not serve crypto.
 
