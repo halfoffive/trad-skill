@@ -295,8 +295,70 @@ fn parse_google_news_rss(xml: &str, query: &str, days: u32, limit: u32) -> Strin
 
 // ───────────────────────── A股新闻（东方财富）─────────────────────────
 
+/// 解析东方财富文章发布时间（如 `"2026-07-30 21:25:00"`）。
+///
+/// 东方财富日期为北京时间（UTC+8），这里按 UTC 解析；`days` 级别过滤下 8h 时差可忽略。
+/// 支持 `YYYY-MM-DD HH:MM:SS` 与 `YYYY-MM-DD HH:MM` 两种格式；解析失败返回 None
+/// （调用方对 None 的条目保留，避免字段变更导致漏报）。
+fn parse_eastmoney_article_date(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    let s = s.trim();
+    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+        .ok()
+        .or_else(|| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").ok())
+        .map(|ndt| ndt.and_utc())
+}
+
+/// 从东方财富搜索响应中提取文章，按 `days` 过滤后取至多 `limit` 条格式化结果。
+///
+/// - 早于 `now - days` 的文章跳过（`--days` 过滤）；无 `date` 或解析失败的条目保留。
+/// - 无 `cmsArticleWebOld` 数组或数组为空时返回 None（由调用方降级到 Google News）。
+fn filter_eastmoney_articles(body: &Value, days: u32, limit: u32) -> Option<Vec<String>> {
+    let arr = body
+        .get("result")
+        .and_then(|r| r.get("cmsArticleWebOld"))
+        .and_then(|a| a.as_array())?;
+    if arr.is_empty() {
+        return None;
+    }
+    let cutoff = chrono::Utc::now() - chrono::Duration::days(days as i64);
+    let mut results = Vec::new();
+    for article in arr {
+        if results.len() >= limit as usize {
+            break;
+        }
+        if let Some(s) = article.get("date").and_then(|v| v.as_str()) {
+            if let Some(pt) = parse_eastmoney_article_date(s) {
+                if pt < cutoff {
+                    continue;
+                }
+            }
+        }
+        let title = strip_html(
+            article
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("无标题"),
+        );
+        let source = article
+            .get("mediaName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = strip_html(
+            article
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
+        );
+        results.push(format_news_item(&title, source, &content));
+    }
+    Some(results)
+}
+
 /// 通过东方财富搜索 API 获取A股/港股新闻。
 /// `code` 为搜索关键字（A股=6位代码，港股=5位零填充代码），`tag` 用于标题与降级查询（"A股"/"港股"）。
+///
+/// `sort=time` 按发布时间倒序拉取最新文章，再按 `days` 客户端过滤，使 `--days` 真正生效
+/// （此前 `sort=default` + 无日期过滤，`--days` 被忽略，常返回数周前旧闻）。
 async fn fetch_eastmoney_news(
     client: &Client,
     code: &str,
@@ -304,7 +366,8 @@ async fn fetch_eastmoney_news(
     limit: u32,
     tag: &str,
 ) -> String {
-    // 东方财富搜索 API（JSONP 格式）
+    let days = days.max(1);
+    // 候选池取 max(limit, 30)：sort=time 拿最新文章，过滤后仍能凑够 limit 条。
     let param = serde_json::json!({
         "uid": "",
         "keyword": code,
@@ -315,9 +378,9 @@ async fn fetch_eastmoney_news(
         "param": {
             "cmsArticleWebOld": {
                 "searchScope": "default",
-                "sort": "default",
+                "sort": "time",
                 "pageIndex": 1,
-                "pageSize": limit,
+                "pageSize": limit.max(30),
                 "preTag": "",
                 "postTag": ""
             }
@@ -329,88 +392,36 @@ async fn fetch_eastmoney_news(
         crate::http::url_encode(&param.to_string())
     );
 
-    match get_with_retry(client, &url, Some(2)).await {
-        Ok(resp) => {
-            let text = match resp.text().await {
-                Ok(t) => t,
-                Err(_e) => {
-                    // 降级到 Google News 中文
-                    return fetch_google_news(
-                        client,
-                        &format!("{} {}", code, tag),
-                        days,
-                        limit,
-                        "zh",
-                    )
-                    .await;
-                }
-            };
-
-            // 剥离 JSONP 包装: jQuery(...)
-            let json_str = strip_jsonp(&text);
-            let body: Value = match serde_json::from_str(&json_str) {
-                Ok(v) => v,
-                Err(_) => {
-                    return fetch_google_news(
-                        client,
-                        &format!("{} {}", code, tag),
-                        days,
-                        limit,
-                        "zh",
-                    )
-                    .await;
-                }
-            };
-
-            // 提取新闻数组
-            let articles = body
-                .get("result")
-                .and_then(|r| r.get("cmsArticleWebOld"))
-                .and_then(|a| a.as_array());
-
-            if let Some(arr) = articles {
-                if !arr.is_empty() {
-                    let mut results = Vec::new();
-                    for article in arr {
-                        let title = strip_html(
-                            article
-                                .get("title")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("无标题"),
-                        );
-                        let source = article
-                            .get("mediaName")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
-                        let content = strip_html(
-                            article
-                                .get("content")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or(""),
-                        );
-                        results.push(format_news_item(&title, source, &content));
-                    }
-
-                    if !results.is_empty() {
-                        let header = format!(
-                            "## {} {} 相关新闻（共 {} 条）\n\n",
-                            tag,
-                            code,
-                            results.len()
-                        );
-                        return format!("{}{}", header, results.join("\n"));
-                    }
+    // 取数 + 解析任一步失败均降级到 Google News 中文（其自身按 when:days 过滤）。
+    let em_items = match get_with_retry(client, &url, Some(2)).await {
+        Ok(resp) => match resp.text().await {
+            Ok(text) => {
+                let json_str = strip_jsonp(&text);
+                match serde_json::from_str::<Value>(&json_str) {
+                    Ok(body) => filter_eastmoney_articles(&body, days, limit),
+                    Err(_) => None,
                 }
             }
+            Err(_) => None,
+        },
+        Err(_) => None,
+    };
 
-            // 东方财富无结果，降级到 Google News 中文
-            fetch_google_news(client, &format!("{} {}", code, tag), days, limit, "zh").await
-        }
-        Err(_) => {
-            // 降级到 Google News 中文
-            fetch_google_news(client, &format!("{} {}", code, tag), days, limit, "zh").await
+    if let Some(items) = em_items {
+        if !items.is_empty() {
+            let header = format!(
+                "## {} {} 相关新闻（最近 {} 天，共 {} 条）\n\n",
+                tag,
+                code,
+                days,
+                items.len()
+            );
+            return format!("{}{}", header, items.join("\n"));
         }
     }
+
+    // 东方财富无结果（或全部被日期过滤），降级到 Google News 中文
+    fetch_google_news(client, &format!("{} {}", code, tag), days, limit, "zh").await
 }
 
 /// 剥离 JSONP 包装：jQuery...({...}) → {...}
@@ -510,5 +521,87 @@ mod tests {
         assert!(item.contains("**Title**"));
         assert!(item.contains("Source"));
         assert!(item.contains("Summary text"));
+    }
+
+    #[test]
+    fn test_parse_eastmoney_article_date() {
+        // 标准格式
+        let dt = parse_eastmoney_article_date("2026-07-30 21:25:00").unwrap();
+        assert_eq!(dt.format("%Y-%m-%d").to_string(), "2026-07-30");
+        // 无秒格式
+        assert!(parse_eastmoney_article_date("2026-07-30 21:25").is_some());
+        // 带空白
+        assert!(parse_eastmoney_article_date("  2026-07-30 21:25:00  ").is_some());
+        // 无效 / 空
+        assert!(parse_eastmoney_article_date("not a date").is_none());
+        assert!(parse_eastmoney_article_date("").is_none());
+    }
+
+    // 验证 --days 过滤：7 天内的保留，30 天前的剔除（修复前 days 被完全忽略）。
+    #[test]
+    fn test_filter_eastmoney_articles_days_filter() {
+        use serde_json::json;
+        let now = chrono::Utc::now();
+        let recent = (now - chrono::Duration::days(1))
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        let old = (now - chrono::Duration::days(30))
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        let body = json!({
+            "result": {
+                "cmsArticleWebOld": [
+                    {"title": "recent", "date": recent, "mediaName": "src", "content": "c1"},
+                    {"title": "old", "date": old, "mediaName": "src", "content": "c2"},
+                ]
+            }
+        });
+        let items = filter_eastmoney_articles(&body, 7, 10).unwrap();
+        assert_eq!(items.len(), 1, "应只保留 7 天内的文章: {:?}", items);
+        assert!(items[0].contains("recent"));
+    }
+
+    // 无 date 字段的条目应保留（避免字段变更导致漏报）。
+    #[test]
+    fn test_filter_eastmoney_articles_keeps_no_date() {
+        use serde_json::json;
+        let body = json!({
+            "result": {
+                "cmsArticleWebOld": [
+                    {"title": "noDate", "mediaName": "src", "content": "c"},
+                ]
+            }
+        });
+        let items = filter_eastmoney_articles(&body, 7, 10).unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(items[0].contains("noDate"));
+    }
+
+    // limit 应截断结果条数。
+    #[test]
+    fn test_filter_eastmoney_articles_limit() {
+        use serde_json::json;
+        let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let body = json!({
+            "result": {
+                "cmsArticleWebOld": [
+                    {"title": "a", "date": now, "mediaName": "", "content": ""},
+                    {"title": "b", "date": now, "mediaName": "", "content": ""},
+                    {"title": "c", "date": now, "mediaName": "", "content": ""},
+                ]
+            }
+        });
+        let items = filter_eastmoney_articles(&body, 7, 2).unwrap();
+        assert_eq!(items.len(), 2, "应受 limit 截断");
+    }
+
+    // 空数组 / 无字段 -> None（调用方降级到 Google News）。
+    #[test]
+    fn test_filter_eastmoney_articles_empty() {
+        use serde_json::json;
+        let empty = json!({"result": {"cmsArticleWebOld": []}});
+        assert!(filter_eastmoney_articles(&empty, 7, 10).is_none());
+        let missing = json!({"result": {}});
+        assert!(filter_eastmoney_articles(&missing, 7, 10).is_none());
     }
 }
