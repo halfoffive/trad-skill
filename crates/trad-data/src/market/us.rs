@@ -142,10 +142,7 @@ async fn fetch_yahoo_chart(
     let resp = get_with_retry_headers(client, &url, &[("User-Agent", BROWSER_UA)], Some(2))
         .await
         .map_err(|e| format!("Yahoo Finance 请求失败({}): {}", symbol, e))?;
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| format!("读取响应失败: {}", e))?;
+    let body = crate::http::text_limited(resp).await?;
     parse_yahoo_response(symbol, &body)
 }
 

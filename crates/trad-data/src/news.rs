@@ -278,7 +278,7 @@ async fn fetch_google_news(
         Err(e) => return format!("错误: Google News 请求失败 - {}", e),
     };
 
-    let xml_text = match resp.text().await {
+    let xml_text = match crate::http::text_limited(resp).await {
         Ok(t) => t,
         Err(e) => return format!("错误: 读取 Google News 响应失败 - {}", e),
     };

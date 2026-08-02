@@ -424,6 +424,7 @@ struct EastmoneyParams {
 /// 东方财富基本面（A股/港股共享）：push2 个股基本信息 + datacenter 财务指标。
 ///
 /// datacenter 若无对应市场数据，优雅降级为「财务指标数据暂不可用」。
+/// 若两个数据源全部失败，返回 "错误: ..." 前缀（与美股行为一致，使调用方返回 Err → exit 1）。
 async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> String {
     let mut sections = Vec::new();
     sections.push(format!("# {} {}（精简）\n", p.display_symbol, p.title));
@@ -470,6 +471,7 @@ async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> S
         p.datacenter_code
     );
 
+    let mut has_finance = false;
     match get_with_retry(client, &fin_url, Some(2)).await {
         Ok(resp) => {
             if let Ok(body) = resp.json::<Value>().await {
@@ -482,6 +484,7 @@ async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> S
                     if !arr.is_empty() {
                         sections.push("## 关键财务指标（最近 4 期）\n".to_string());
                         sections.push(build_cn_financial_table(arr));
+                        has_finance = true;
                     } else {
                         sections.push("## 关键财务指标\n\n> 财务指标数据暂不可用\n".to_string());
                     }
@@ -495,6 +498,15 @@ async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> S
         Err(_) => {
             sections.push("## 关键财务指标\n\n> 财务指标数据暂不可用\n".to_string());
         }
+    }
+
+    // 两个数据源全部失败时返回 "错误:" 前缀，使 fetch_fundamentals 返回 Err（exit 1），
+    // 与美股全失败行为一致。
+    if !has_info && !has_finance {
+        return format!(
+            "错误: {} 基本面数据获取失败（东方财富 API 不可达或代码无效）",
+            p.display_symbol
+        );
     }
 
     sections.join("\n")

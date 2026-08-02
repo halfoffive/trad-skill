@@ -21,11 +21,11 @@ use clap::{Parser, Subcommand};
 )]
 struct Cli {
     /// 目标 agent：claude | agents | opencode（默认 agents）。仅 install 模式生效。
-    #[arg(long, value_enum, global = true)]
+    #[arg(long, value_enum, global = true, conflicts_with = "dir")]
     agent: Option<install::AgentTarget>,
 
     /// 自定义目标 skills 父目录（与 --agent 互斥）。仅 install 模式生效。
-    #[arg(long, global = true)]
+    #[arg(long, global = true, conflicts_with = "agent")]
     dir: Option<String>,
 
     /// 源技能目录。仅 install 模式生效。

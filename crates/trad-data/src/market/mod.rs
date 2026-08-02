@@ -68,11 +68,12 @@ pub fn detect_market(symbol: &str) -> Market {
     Market::US
 }
 
-/// A股市场 id（东方财富 secid 前缀）：6xx/9xx → 沪市(1)，其中 9xx 含 900xxx 沪B；
+/// A股市场 id（东方财富 secid 前缀）：6xx/900xxx → 沪市(1)，其中 900xxx 为沪B；
 /// 其余（深市 0x/2x/3x、北交所 8xx/92x）同用市场 0。
+/// 注意：920xxx 为北交所新股，必须以 "900" 精确匹配沪B，不能用 starts_with('9')。
 pub fn cn_market_id(symbol: &str) -> u8 {
     let s = symbol.trim();
-    if s.starts_with('6') || s.starts_with('9') {
+    if s.starts_with('6') || s.starts_with("900") {
         1
     } else {
         0
@@ -110,10 +111,7 @@ pub async fn fetch_eastmoney_kline(
     let resp = crate::http::get_with_retry(client, &url, Some(retries))
         .await
         .map_err(|e| format!("东方财富 API 请求失败: {}", e))?;
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| format!("读取响应失败: {}", e))?;
+    let body = crate::http::text_limited(resp).await?;
 
     let root: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))?;
@@ -218,6 +216,9 @@ fn hk_to_yahoo_symbol(symbol: &str) -> String {
 /// 去 `.HK`/`.hk` 后缀，前导零补足 5 位（`0700.HK` → `00700`，`9988.HK` → `09988`，
 /// `09988` → `09988`）。东方财富港股端点（push2his 行情、push2 基本信息、datacenter
 /// 财务/情绪）一律要求 5 位零填充代码；4 位或带后缀的 secid 会返回 `data:null`。
+///
+/// 校验：去后缀后必须为 1-5 位纯数字，否则返回错误字符串（防止 `&`/`?` 等字符
+/// 注入东方财富 URL 查询参数）。
 pub fn hk_eastmoney_code(symbol: &str) -> String {
     let s = symbol.trim();
     let digits = s
@@ -225,6 +226,11 @@ pub fn hk_eastmoney_code(symbol: &str) -> String {
         .or_else(|| s.strip_suffix(".hk"))
         .unwrap_or(s)
         .trim();
+    // 防御：港股代码必须为纯数字，否则拒绝（避免查询参数注入）
+    if digits.is_empty() || digits.len() > 5 || !digits.chars().all(|c| c.is_ascii_digit()) {
+        // 返回一个不可能命中真实数据的占位码，让 API 返回 data:null 而非注入参数
+        return "00000".to_string();
+    }
     format!("{:0>5}", digits)
 }
 
@@ -334,7 +340,7 @@ mod tests {
     fn test_cn_market_id() {
         // 沪市 6xx
         assert_eq!(cn_market_id("600519"), 1);
-        // 沪B 900xxx（修复前被误判深市）
+        // 沪B 900xxx
         assert_eq!(cn_market_id("900901"), 1);
         assert_eq!(cn_market_id("900901 "), 1);
         // 深市 0x/2x/3x
@@ -342,6 +348,9 @@ mod tests {
         assert_eq!(cn_market_id("300750"), 0);
         // 北交所 8xx（与深市同市场域）
         assert_eq!(cn_market_id("833171"), 0);
+        // 北交所 920xxx（修复前被 starts_with('9') 误判为沪市）
+        assert_eq!(cn_market_id("920001"), 0);
+        assert_eq!(cn_market_id("920082"), 0);
     }
 
     #[test]
@@ -437,6 +446,10 @@ mod tests {
         assert_eq!(hk_eastmoney_code("09988"), "09988");
         // 带空白
         assert_eq!(hk_eastmoney_code(" 9988.HK "), "09988");
+        // 非数字输入：返回安全占位码（防查询参数注入）
+        assert_eq!(hk_eastmoney_code("abc&x.HK"), "00000");
+        assert_eq!(hk_eastmoney_code("foo.HK"), "00000");
+        assert_eq!(hk_eastmoney_code(".HK"), "00000");
     }
 
     #[test]
