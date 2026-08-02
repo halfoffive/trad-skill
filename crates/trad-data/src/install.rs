@@ -71,11 +71,16 @@ pub struct InstallArgs {
 fn home_dir() -> Option<PathBuf> {
     if std::env::consts::OS == "windows" {
         std::env::var_os("USERPROFILE")
-            .or_else(|| std::env::var_os("HOME").filter(|h| is_drive_letter_abs(h.as_os_str())))
+            .filter(|v| !v.is_empty())
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .filter(|h| !h.is_empty() && is_drive_letter_abs(h.as_os_str()))
+            })
             .map(PathBuf::from)
     } else {
         std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
+            .filter(|v| !v.is_empty())
+            .or_else(|| std::env::var_os("USERPROFILE").filter(|v| !v.is_empty()))
             .map(PathBuf::from)
     }
 }
@@ -197,7 +202,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
 pub fn run(args: InstallArgs) -> Result<()> {
     // 1. 解析源技能目录
     let skills_src = match &args.skills_dir {
-        Some(s) => absolutize(s)?,
+        Some(s) => expand_tilde(s)?,
         None => {
             // dev 默认：相对 crate manifest 指向仓库 skills/
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -206,7 +211,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         }
     };
     let skill_md = skills_src.join("SKILL.md");
-    if !skill_md.exists() {
+    if !skill_md.is_file() {
         bail!(
             "找不到技能源目录：{}（缺少 SKILL.md，安装包可能不完整）",
             skills_src.display()
@@ -260,7 +265,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
     //      中途失败（磁盘满、权限、杀软锁）不会破坏上一次的可用安装。
     fs::create_dir_all(&parent_dir)
         .with_context(|| format!("创建父目录失败：{}", parent_dir.display()))?;
-    if dest_dir.exists() && !dest_dir.join("SKILL.md").exists() {
+    if dest_dir.exists() && !dest_dir.join("SKILL.md").is_file() {
         bail!(
             "目标目录已存在但不是本技能安装（缺少 SKILL.md）：{}。\n\
              请确认后手动删除该目录，或改用其它 --dir / --agent 目标。",
@@ -281,8 +286,16 @@ pub fn run(args: InstallArgs) -> Result<()> {
     if let Err(e) = fs::rename(&tmp_dir, &dest_dir) {
         // 回滚：恢复旧安装，避免留下空目标目录
         if backup_dir.exists() {
-            let _ = fs::rename(&backup_dir, &dest_dir);
+            if let Err(rollback_err) = fs::rename(&backup_dir, &dest_dir) {
+                eprintln!(
+                    "⚠ 回滚失败：旧安装仍在 {}（{}",
+                    backup_dir.display(),
+                    rollback_err
+                );
+            }
         }
+        // 清理临时目录，避免残留
+        let _ = fs::remove_dir_all(&tmp_dir);
         return Err(e).context(format!("技能文件就位失败：{}", dest_dir.display()));
     }
     if backup_dir.exists() {
@@ -290,10 +303,10 @@ pub fn run(args: InstallArgs) -> Result<()> {
     }
 
     let dest_bin = dest_dir.join("bin");
-    fs::create_dir_all(&dest_bin)?;
 
     // 6. 复制平台二进制到 bin/<platform>/trad-skill[.exe]
     let bin_installed = if !args.no_bin {
+        fs::create_dir_all(&dest_bin)?;
         if let Some(b) = &bin_src {
             if b.exists() {
                 let dest_platform_dir = dest_bin.join(&node_key);
