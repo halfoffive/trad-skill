@@ -6,17 +6,46 @@
 //! `news.rs`（quoteSummary）复用。
 use crate::http::get_with_retry_headers;
 use reqwest::Client;
+use std::sync::Mutex;
 
 /// 浏览器 User-Agent：Yahoo 会封锁非浏览器 UA（尤其数据中心 IP），
 /// 所有 Yahoo 请求必须携带真实浏览器 UA。
 pub const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
+/// 进程级 crumb 缓存：批量抓多个 symbol 时只握手一次（每次握手 2 个请求）。
+/// crumb 有效期数小时；带 crumb 请求失败时调用方应 `invalidate_crumb_cache()`，
+/// 让后续请求重新握手。
+static CRUMB_CACHE: Mutex<Option<String>> = Mutex::new(None);
+
+fn crumb_cache() -> std::sync::MutexGuard<'static, Option<String>> {
+    // 锁中毒（panic 后）视为空缓存，不 panic
+    CRUMB_CACHE.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// 清除 crumb 缓存（带 crumb 请求连续失败时调用，让下一个请求重新握手）
+pub fn invalidate_crumb_cache() {
+    *crumb_cache() = None;
+}
 
 /// 获取 Yahoo Finance crumb token（yfinance 底层反爬握手）
 ///
 /// 流程：先访问 fc.yahoo.com 种 cookie（cookie store 自动保存），
 /// 再用同一 cookie 请求 v1/test/getcrumb 取得 crumb 字符串。
 /// 任一步失败返回 None（调用方仍可尝试无 crumb 请求）。
+/// 成功后写入进程级缓存；`invalidate_crumb_cache` 清空。
 pub async fn get_crumb(client: &Client) -> Option<String> {
+    // 缓存命中直接返回，避免每个 symbol 都做两次握手请求
+    if let Some(c) = crumb_cache().clone() {
+        return Some(c);
+    }
+    let crumb = get_crumb_fresh(client).await;
+    if crumb.is_some() {
+        *crumb_cache() = crumb.clone();
+    }
+    crumb
+}
+
+async fn get_crumb_fresh(client: &Client) -> Option<String> {
     // 种 cookie（响应状态码无关紧要，忽略结果）
     let _ = client
         .get("https://fc.yahoo.com")
@@ -103,9 +132,16 @@ pub async fn yahoo_get_body(client: &Client, url: &str) -> Result<String, String
     let resp = get_with_retry_headers(client, &url2, &[("User-Agent", BROWSER_UA)], Some(2))
         .await
         .map_err(|e| format!("Yahoo Finance 请求失败: {}", e))?;
-    resp.text()
+    let body = resp
+        .text()
         .await
-        .map_err(|e| format!("读取响应失败: {}", e))
+        .map_err(|e| format!("读取响应失败: {}", e))?;
+    if body_has_yahoo_error(&body) {
+        // 带 crumb 仍返回错误体：crumb 可能已轮换/失效，清除缓存让下一次重新握手
+        invalidate_crumb_cache();
+        return Err("Yahoo Finance 返回错误响应（可能仍被区域封锁）".to_string());
+    }
+    Ok(body)
 }
 
 #[cfg(test)]

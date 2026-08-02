@@ -1,4 +1,3 @@
-use crate::http::get_with_retry;
 use crate::market::{parse_eastmoney_klines, OhlcvRow};
 use reqwest::Client;
 
@@ -52,37 +51,10 @@ async fn fetch_one(
     beg: &str,
     end_fmt: &str,
 ) -> Result<(Vec<OhlcvRow>, Option<i64>), String> {
-    let url = format!(
-        "https://push2his.eastmoney.com/api/qt/stock/kline/get?\
-         fields1=f1,f2,f3,f4,f5,f6\
-         &fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116\
-         &ut=7eea3edcaed734bea9cbfc24409ed989\
-         &klt=101&fqt=1\
-         &secid={}\
-         &beg={}&end={}",
-        secid, beg, end_fmt
-    );
-
-    let resp = get_with_retry(client, &url, Some(2))
-        .await
-        .map_err(|e| format!("东方财富美股 API 请求失败: {}", e))?;
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| format!("读取响应失败: {}", e))?;
-
-    let root: serde_json::Value =
-        serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))?;
-
-    let data = root.get("data");
-    let market = data.and_then(|d| d.get("market")).and_then(|m| m.as_i64());
-    let klines = data
-        .and_then(|d| d.get("klines"))
-        .and_then(|k| k.as_array());
-
-    match klines {
-        Some(k) => Ok((parse_eastmoney_klines(k, None), market)),
-        None => Ok((Vec::new(), market)),
+    match crate::market::fetch_eastmoney_kline(client, secid, beg, end_fmt, None, 2).await {
+        Ok(Some((klines, market))) => Ok((parse_eastmoney_klines(&klines, None), market)),
+        Ok(None) => Ok((Vec::new(), None)),
+        Err(e) => Err(format!("东方财富美股 API 请求失败: {}", e)),
     }
 }
 

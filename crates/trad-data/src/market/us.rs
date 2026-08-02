@@ -207,9 +207,12 @@ pub async fn fetch_us_ohlcv(
 
     // 第二步：cookie + crumb 握手后重试。
     let crumb = get_crumb(client).await;
-    fetch_yahoo_chart(client, symbol, period1, period2, crumb.as_deref())
-        .await
-        .map_err(|e| format!("{}{}", e, yahoo_fallback_hint(symbol)))
+    let result = fetch_yahoo_chart(client, symbol, period1, period2, crumb.as_deref()).await;
+    if result.is_err() {
+        // 带 crumb 仍失败：crumb 可能已轮换/失效，清除缓存让后续请求重新握手
+        crate::yahoo::invalidate_crumb_cache();
+    }
+    result.map_err(|e| format!("{}{}", e, yahoo_fallback_hint(symbol)))
 }
 
 #[cfg(test)]

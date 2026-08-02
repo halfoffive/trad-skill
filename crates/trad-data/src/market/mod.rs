@@ -79,6 +79,54 @@ pub fn cn_market_id(symbol: &str) -> u8 {
     }
 }
 
+/// 东方财富 push2his kline 请求公共骨架（cn/hk/us_em 三渠道共用）。
+///
+/// 构造 URL → get_with_retry → text → JSON 解析 → 取 `data.klines` 与 `data.market`。
+/// `data` 缺失或为 null（无效 secid）返回 Ok(None)，由调用方决定如何降级；
+/// 网络/解析错误返回 Err。
+/// `lmt` 为可选附加查询参数（如 `lmt=1000000`），`retries` 为 HTTP 重试次数。
+pub async fn fetch_eastmoney_kline(
+    client: &reqwest::Client,
+    secid: &str,
+    beg: &str,
+    end_fmt: &str,
+    lmt: Option<&str>,
+    retries: u32,
+) -> Result<Option<(Vec<serde_json::Value>, Option<i64>)>, String> {
+    let url = format!(
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get?\
+         fields1=f1,f2,f3,f4,f5,f6\
+         &fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116\
+         &ut=7eea3edcaed734bea9cbfc24409ed989\
+         &klt=101&fqt=1\
+         &secid={}\
+         &beg={}&end={}{}",
+        secid,
+        beg,
+        end_fmt,
+        lmt.map(|l| format!("&{l}")).unwrap_or_default()
+    );
+
+    let resp = crate::http::get_with_retry(client, &url, Some(retries))
+        .await
+        .map_err(|e| format!("东方财富 API 请求失败: {}", e))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
+
+    let root: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))?;
+
+    let data = root.get("data");
+    let market = data.and_then(|d| d.get("market")).and_then(|m| m.as_i64());
+    let klines = data
+        .and_then(|d| d.get("klines"))
+        .and_then(|k| k.as_array())
+        .cloned();
+    Ok(klines.map(|k| (k, market)))
+}
+
 /// 解析东方财富 klines 字符串数组为 OhlcvRow
 ///
 /// klines 字段顺序: 日期,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率[,股票代码]
