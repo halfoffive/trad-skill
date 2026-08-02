@@ -59,12 +59,30 @@ pub struct InstallArgs {
     pub wrapper: Option<String>,
 }
 
-/// 读取 home 目录：优先 HOME（Unix），回退 USERPROFILE（Windows）。
+/// 读取 home 目录：Unix 优先 HOME；Windows 优先 USERPROFILE。
+///
+/// Git Bash / MSYS2 / CI shell 在 Windows 上常把 HOME 设为 POSIX 风格路径
+/// （如 `/c/Users/foo`），Rust 会把前导 `/` 解析为当前盘符根目录，导致技能被
+/// 静默装到 `C:\c\Users\foo\.agents\skills` 这类错误位置。因此 Windows 下仅当
+/// HOME 是盘符绝对路径（`C:\...`）时才采用，否则回退 USERPROFILE。
 /// 不引入 `dirs` crate——windows/unix 路径分支覆盖全部 7 个交叉编译目标。
 fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    if std::env::consts::OS == "windows" {
+        std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME").filter(|h| is_drive_letter_abs(h.as_os_str())))
+            .map(PathBuf::from)
+    } else {
+        std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+    }
+}
+
+/// HOME 是否为盘符绝对路径（`C:\...` / `C:/...`）
+fn is_drive_letter_abs(p: &std::ffi::OsStr) -> bool {
+    let s = p.to_string_lossy();
+    let b = s.as_bytes();
+    b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/')
 }
 
 /// 预置 agent → 默认 skills 父目录
@@ -144,6 +162,14 @@ fn bin_ext() -> &'static str {
     }
 }
 
+/// 两个路径是否指向同一目录（两者都存在时用 canonicalize 消除符号链接差异）
+fn same_path(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(ca), Ok(cb)) => ca == cb,
+        _ => a == b,
+    }
+}
+
 /// 纯 std 递归目录复制（不引入额外运行时依赖；技能目录全是文本文件，无符号链接）
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     fs::create_dir_all(dst).with_context(|| format!("创建目录失败：{}", dst.display()))?;
@@ -189,6 +215,14 @@ pub fn run(args: InstallArgs) -> Result<()> {
     let parent_dir = resolve_parent_dir(&args.dir, &args.agent)?;
     let dest_dir = parent_dir.join(SKILL_NAME);
 
+    // 防御：--skills-dir 指向已安装副本时 src 与 dest 相同，下面的删除会自毁 → 直接拒绝
+    if same_path(&skills_src, &dest_dir) {
+        bail!(
+            "源技能目录与目标目录相同（{}）：请改用 --dir 指定其它安装目标",
+            dest_dir.display()
+        );
+    }
+
     let node_key = node_platform_key();
     let ext = bin_ext();
     let bin_name = format!("trad-skill{ext}");
@@ -218,14 +252,40 @@ pub fn run(args: InstallArgs) -> Result<()> {
         return Ok(());
     }
 
-    // 5. 真正安装：幂等（先删旧目录再复制）
+    // 5. 真正安装：幂等 + 数据安全。
+    //    - 目标已存在但缺 SKILL.md → 不是本技能安装，拒绝删除（防误删用户目录）
+    //    - 先复制到同目录临时目录，旧目录改名备份，新目录换名就位后再删备份。
+    //      中途失败（磁盘满、权限、杀软锁）不会破坏上一次的可用安装。
     fs::create_dir_all(&parent_dir)
         .with_context(|| format!("创建父目录失败：{}", parent_dir.display()))?;
-    if dest_dir.exists() {
-        fs::remove_dir_all(&dest_dir)
-            .with_context(|| format!("删除旧安装目录失败：{}", dest_dir.display()))?;
+    if dest_dir.exists() && !dest_dir.join("SKILL.md").exists() {
+        bail!(
+            "目标目录已存在但不是本技能安装（缺少 SKILL.md）：{}。\n\
+             请确认后手动删除该目录，或改用其它 --dir / --agent 目标。",
+            dest_dir.display()
+        );
     }
-    copy_dir_recursive(&skills_src, &dest_dir).context("复制技能文件失败")?;
+    let tmp_dir = parent_dir.join(format!(".{SKILL_NAME}.tmp-{}", std::process::id()));
+    if tmp_dir.exists() {
+        fs::remove_dir_all(&tmp_dir)
+            .with_context(|| format!("清理残留临时目录失败：{}", tmp_dir.display()))?;
+    }
+    copy_dir_recursive(&skills_src, &tmp_dir).context("复制技能文件失败")?;
+    let backup_dir = parent_dir.join(format!(".{SKILL_NAME}.old-{}", std::process::id()));
+    if dest_dir.exists() {
+        fs::rename(&dest_dir, &backup_dir)
+            .with_context(|| format!("备份旧安装失败：{}", dest_dir.display()))?;
+    }
+    if let Err(e) = fs::rename(&tmp_dir, &dest_dir) {
+        // 回滚：恢复旧安装，避免留下空目标目录
+        if backup_dir.exists() {
+            let _ = fs::rename(&backup_dir, &dest_dir);
+        }
+        return Err(e).context(format!("技能文件就位失败：{}", dest_dir.display()));
+    }
+    if backup_dir.exists() {
+        let _ = fs::remove_dir_all(&backup_dir); // 备份清理失败仅留残留，不阻断安装
+    }
 
     let dest_bin = dest_dir.join("bin");
     fs::create_dir_all(&dest_bin)?;
@@ -250,14 +310,20 @@ pub fn run(args: InstallArgs) -> Result<()> {
         false
     };
 
-    // 7. 打印结果
+    // 7. 打印结果。未指定 --no-bin 但二进制没装上 → 安装不完整，以非零码失败
+    if !bin_installed && !args.no_bin {
+        eprintln!("错误: 平台二进制未安装（--bin-path 文件不存在或复制失败）。");
+        eprintln!("  技能文件已就位，但数据工具不可用。可移除无效的 --bin-path 后重试：");
+        eprintln!("  bunx trad-skill@latest install");
+        return Err(anyhow!("平台二进制未安装"));
+    }
     println!("✓ 已安装 {SKILL_NAME} → {}", dest_dir.display());
     println!();
     println!("下一步：");
     if bin_installed {
         println!("  ✓ trad-skill 二进制已安装 ({node_key})");
     } else {
-        println!("  ⚠ 数据二进制未安装，可改用 `bunx trad-skill@latest <子命令>` 调用数据工具。");
+        println!("  ⚠ 数据二进制未安装（--no-bin），可改用 `bunx trad-skill@latest <子命令>` 调用数据工具。");
     }
     println!("  1. 重启你的 AI agent / 开一个新会话，让它加载该技能。");
     println!("  2. 触发分析，例如：\"分析 AAPL\" 或 \"Analyze 600519\" 。");
@@ -295,6 +361,123 @@ mod tests {
             dry_run: false,
             wrapper: None,
         }
+    }
+
+    /// 构造显式 dir + skills_dir 的安装参数（no_bin，避免测试触碰真实二进制）
+    fn install_args(dir: &str, skills_dir: &str) -> InstallArgs {
+        InstallArgs {
+            dir: Some(dir.to_string()),
+            skills_dir: Some(skills_dir.to_string()),
+            ..default_install_args()
+        }
+    }
+
+    /// 建一个含 SKILL.md 的最小技能源目录
+    fn make_skill_src(root: &Path) -> std::path::PathBuf {
+        let src = root.join("src");
+        std::fs::create_dir_all(src.join("nested")).unwrap();
+        std::fs::write(src.join("SKILL.md"), "# test skill").unwrap();
+        std::fs::write(src.join("nested/file.txt"), "a").unwrap();
+        src
+    }
+
+    #[test]
+    fn rejects_src_equals_dest() {
+        let root = std::env::temp_dir().join("trad-skill-install-srcdest");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        // 技能源直接位于目标同名目录（模拟 --skills-dir 指向已安装副本）
+        let src = root.join(SKILL_NAME);
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("SKILL.md"), "# test skill").unwrap();
+        // --dir <root> → dest == <root>/tradingagents-analysis == src
+        let args = install_args(root.to_str().unwrap(), src.to_str().unwrap());
+        let err = run(args).unwrap_err();
+        assert!(err.to_string().contains("相同"), "应拒绝 src==dest: {err}");
+        // 源目录未被破坏
+        assert!(src.join("SKILL.md").exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn rejects_existing_dir_without_skill_marker() {
+        let root = std::env::temp_dir().join("trad-skill-install-noskill");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        let src = make_skill_src(&root);
+        // 目标已存在同名目录但不含 SKILL.md（用户数据）
+        let dest = root.join(SKILL_NAME);
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(dest.join("user-data.txt"), "keep me").unwrap();
+        let args = install_args(root.to_str().unwrap(), src.to_str().unwrap());
+        let err = run(args).unwrap_err();
+        assert!(
+            err.to_string().contains("SKILL.md"),
+            "应提示缺 SKILL.md: {err}"
+        );
+        // 用户目录未被删除
+        assert!(dest.join("user-data.txt").exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn install_is_idempotent() {
+        let root = std::env::temp_dir().join("trad-skill-install-idem");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        let src = make_skill_src(&root);
+        let target = root.join("target");
+        // 首次安装
+        run(install_args(
+            target.to_str().unwrap(),
+            src.to_str().unwrap(),
+        ))
+        .unwrap();
+        let installed = target.join(SKILL_NAME);
+        assert!(installed.join("SKILL.md").exists());
+        // 重复安装（幂等）也成功，且内容被替换
+        std::fs::write(src.join("SKILL.md"), "# test skill v2").unwrap();
+        run(install_args(
+            target.to_str().unwrap(),
+            src.to_str().unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(installed.join("SKILL.md")).unwrap(),
+            "# test skill v2"
+        );
+        // 无残留临时/备份目录
+        for entry in std::fs::read_dir(&target).unwrap() {
+            let name = entry.unwrap().file_name();
+            assert!(
+                name == SKILL_NAME,
+                "target 下不应有残留目录: {}",
+                name.to_string_lossy()
+            );
+        }
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn missing_bin_path_fails_install() {
+        let root = std::env::temp_dir().join("trad-skill-install-nobin");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        let src = make_skill_src(&root);
+        let target = root.join("target");
+        let args = InstallArgs {
+            dir: Some(target.to_str().unwrap().to_string()),
+            skills_dir: Some(src.to_str().unwrap().to_string()),
+            bin_path: Some(root.join("nonexistent-bin").to_str().unwrap().to_string()),
+            no_bin: false,
+            ..default_install_args()
+        };
+        let err = run(args).unwrap_err();
+        assert!(
+            err.to_string().contains("二进制"),
+            "应报告二进制未安装: {err}"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
