@@ -23,7 +23,7 @@ const REDDIT_POST_DISPLAY: usize = 8;
 async fn fetch_stocktwits(client: &Client, symbol: &str, limit: u32) -> String {
     let url = format!(
         "https://api.stocktwits.com/api/2/streams/symbol/{}.json",
-        symbol
+        crate::http::url_encode(symbol)
     );
 
     let resp = match get_with_retry(client, &url, Some(1)).await {
@@ -119,14 +119,19 @@ async fn fetch_subreddit(
 ) -> Vec<RedditPost> {
     let url = format!(
         "https://www.reddit.com/r/{}/search.json?q={}&sort=new&t={}&limit=10",
-        subreddit, symbol, time_filter
+        subreddit,
+        crate::http::url_encode(symbol),
+        time_filter
     );
 
-    let resp = match client
-        .get(&url)
-        .header("User-Agent", "TradingAgents-Skill/1.0")
-        .send()
-        .await
+    // Reddit 对通用 UA 越来越严，且偶发 429：走共享重试 + 浏览器 UA。
+    let resp = match crate::http::get_with_retry_headers(
+        client,
+        &url,
+        &[("User-Agent", crate::yahoo::BROWSER_UA)],
+        Some(1),
+    )
+    .await
     {
         Ok(r) if r.status().is_success() => r,
         _ => return Vec::new(),
@@ -397,8 +402,22 @@ fn format_org_participation_table(data: &[Value]) -> String {
 /// - 其他 → StockTwits + Reddit（并行获取）
 ///
 /// `days` 控制 Reddit 帖子时间窗（≤7 天按 week、>7 天按 month）。
-/// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_sentiment(client: &Client, symbol: &str, limit: u32, days: u32) -> String {
+/// 契约：永不 panic，错误以 Err(String) 返回（调用方不再靠字符串前缀探测错误）。
+pub async fn fetch_sentiment(
+    client: &Client,
+    symbol: &str,
+    limit: u32,
+    days: u32,
+) -> Result<String, String> {
+    let out = fetch_sentiment_inner(client, symbol, limit, days).await;
+    if out.starts_with("错误") {
+        Err(out)
+    } else {
+        Ok(out)
+    }
+}
+
+async fn fetch_sentiment_inner(client: &Client, symbol: &str, limit: u32, days: u32) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();
@@ -482,7 +501,9 @@ mod tests {
     #[ignore = "hits the live Eastmoney API"]
     async fn test_live_sentiment_cn() {
         let client = crate::http::build_client().unwrap();
-        let out = fetch_sentiment(&client, "002594", 15, 7).await;
+        let out = fetch_sentiment(&client, "002594", 15, 7)
+            .await
+            .unwrap_or_else(|e| panic!("002594 情绪不应报错: {}", e));
         assert!(out.contains("个股评论"), "应包含个股评论段落");
         // 修复后 综合得分/目前排名/关注指数 不应再全为 N/A
         assert!(

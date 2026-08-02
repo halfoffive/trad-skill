@@ -72,8 +72,9 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             use-cross: false
+          # aarch64 MSVC 交叉链接器依赖镜像预装工具链，固定镜像版本抗漂移
           - target: aarch64-pc-windows-msvc
-            os: windows-latest
+            os: windows-2025
             use-cross: false
 
     steps:
@@ -164,8 +165,14 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.value }}"
           TAG="${TAG#v}"
-          # Extract section for this version from CHANGELOG.md
-          awk "/^## .*${TAG}/{found=1; next} /^## /{found=0} found{print}" CHANGELOG.md > release_notes.md
+          # 字面匹配 "## [<version>]"（index 而非正则），避免 1.9 误匹配 1.9.0 小节
+          awk -v tag="$TAG" '
+            /^## / {
+              if (index($0, "## [" tag "]") == 1) { found=1; next }
+              found=0
+            }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
           # If no section found, use git log
           if [ ! -s release_notes.md ]; then
             echo "No changelog entry found for ${TAG}, using git log." > release_notes.md
@@ -241,12 +248,53 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # workflow_dispatch 必须 checkout 解析出的 tag 本身，而不是默认分支——
+      # 否则发布的 package.json 版本可能与 tag 不一致
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.tag.outputs.value }}
 
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify version consistency with tag
+        run: |
+          VERSION="${{ steps.tag.outputs.value }}"
+          VERSION="${VERSION#v}"
+          node -e '
+            const fs = require("fs");
+            const version = process.argv[1];
+            const files = [
+              "package.json",
+              ...fs.readdirSync("npm").map(d => `npm/${d}/package.json`),
+            ];
+            for (const f of files) {
+              const pkg = JSON.parse(fs.readFileSync(f, "utf8"));
+              if (pkg.version !== version) {
+                console.error(`版本不一致: ${f} = ${pkg.version}，tag = ${version}`);
+                process.exit(1);
+              }
+            }
+            const cargo = fs.readFileSync("crates/trad-data/Cargo.toml", "utf8");
+            const m = cargo.match(/^version\s*=\s*"([^"]+)"/m);
+            if (!m || m[1] !== version) {
+              console.error(`Cargo.toml 版本不一致: ${m ? m[1] : "未找到"}，tag = ${version}`);
+              process.exit(1);
+            }
+            console.log(`✓ ${files.length} 个 npm manifest + Cargo.toml 与 tag v${version} 一致`);
+          ' "$VERSION"
 
       - name: Remove deprecated always-auth from .npmrc
         run: sed -i '/always-auth/d' .npmrc 2>/dev/null || true

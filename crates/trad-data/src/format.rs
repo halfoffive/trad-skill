@@ -59,6 +59,10 @@ pub fn build_compact_report(
 /// 将 OhlcvRow 切片转为 CSV 字符串
 ///
 /// 格式：Date,Open,High,Low,Close,Volume
+///
+/// 数值用 Rust 的 `{}`（最短往返表示）：API 字符串解析出的 f64 打印出来
+/// 与原文一致（1363.02 → "1363.02"），不会出现 Python repr 式的
+/// "100.30000000000001"；volume 同样不四舍五入——加密币成交量可以是小数。
 pub fn ohlcv_to_csv(data: &[OhlcvRow]) -> String {
     let mut lines = Vec::new();
     lines.push("Date,Open,High,Low,Close,Volume".to_string());

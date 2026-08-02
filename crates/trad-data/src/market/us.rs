@@ -82,7 +82,10 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
         .and_then(|v| v.as_array())
         .ok_or("缺少 volume")?;
 
-    let mut rows = Vec::new();
+    let mut rows = Vec::with_capacity(timestamps.len());
+    // 辅助函数：从 JSON 数组中取 f64 值，null 则跳过（提升到循环外，避免每行重建闭包）
+    let get_f64 =
+        |arr: &Vec<Value>, idx: usize| -> Option<f64> { arr.get(idx).and_then(|v| v.as_f64()) };
     for (i, ts_val) in timestamps.iter().enumerate() {
         // 提取时间戳并转为日期字符串。
         // ts 非 i64（null/异常）或时间戳非法时跳过该行，避免生成 1970-01-01 假数据。
@@ -91,10 +94,6 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
             continue;
         };
         let date = dt.format("%Y-%m-%d").to_string();
-
-        // 辅助函数：从 JSON 数组中取 f64 值，null 则跳过
-        let get_f64 =
-            |arr: &Vec<Value>, idx: usize| -> Option<f64> { arr.get(idx).and_then(|v| v.as_f64()) };
 
         // 如果关键字段为 null（停牌日），跳过该行
         let (Some(o), Some(h), Some(l), Some(c)) = (
@@ -131,7 +130,9 @@ async fn fetch_yahoo_chart(
 ) -> Result<Vec<OhlcvRow>, String> {
     let base = format!(
         "https://query2.finance.yahoo.com/v8/finance/chart/{}?period1={}&period2={}&interval=1d",
-        symbol, period1, period2
+        crate::http::url_encode(symbol),
+        period1,
+        period2
     );
     let url = match crumb {
         Some(c) => append_crumb(&base, c),
@@ -148,6 +149,26 @@ async fn fetch_yahoo_chart(
     parse_yahoo_response(symbol, &body)
 }
 
+/// 确定性错误：重试与 crumb 握手都不会改变结果（Invalid symbol / Not Found），
+/// 直接返回，避免为无效 symbol 白做 2 次握手请求并掩盖原始错误。
+fn is_definitive_yahoo_error(e: &str) -> bool {
+    let lower = e.to_ascii_lowercase();
+    lower.contains("invalid symbol")
+        || lower.contains("not found")
+        || lower.contains("no data found")
+}
+
+/// 按市场定制 Yahoo 失败提示：加密货币没有东方财富备用渠道，
+/// 提示"改用 --source eastmoney"只会再撞一次"暂不支持加密货币"。
+fn yahoo_fallback_hint(symbol: &str) -> String {
+    match crate::market::detect_market(symbol) {
+        crate::market::Market::Crypto => {
+            "（加密货币无东方财富备用渠道，请检查网络后重试）".to_string()
+        }
+        _ => "（若所在地区无法访问 Yahoo，可改用 --source eastmoney）".to_string(),
+    }
+}
+
 /// 获取美股/加密货币 OHLCV 数据（Yahoo Finance v8 API）
 ///
 /// 调用 yfinance 底层协议：
@@ -155,8 +176,9 @@ async fn fetch_yahoo_chart(
 ///
 /// 两步策略：
 /// 1. 直连 query2（浏览器 UA）——多数地区一次成功；
-/// 2. 若返回空或错误（数据中心 IP / 区域封锁时 Yahoo 常返回 HTTP 200 但
-///    `chart.error=null`），走 cookie + crumb 握手后带 crumb 重试。
+/// 2. 仅当返回空数据或可恢复错误（传输/限流/区域封锁——数据中心 IP 下
+///    Yahoo 常返回 HTTP 200 但 `chart.error=null`）才走 cookie + crumb 握手重试；
+///    "Invalid symbol" 等确定性错误直接短路。
 ///
 /// 日期参数从 YYYY-MM-DD 转为 Unix 时间戳。
 /// 返回错误字符串而非 panic（对齐 Python "never raises" 契约）。
@@ -172,23 +194,25 @@ pub async fn fetch_us_ohlcv(
     // 加 1 天让端点包含在内，与东方财富通道（含端点）行为一致。
     let period2 = date_to_unix(end)? + 86_400;
 
-    // 第一步：直连（无 crumb）。非空结果直接返回。
-    if let Ok(rows) = fetch_yahoo_chart(client, symbol, period1, period2, None).await {
-        if !rows.is_empty() {
-            return Ok(rows);
+    // 第一步：直连（无 crumb）。
+    match fetch_yahoo_chart(client, symbol, period1, period2, None).await {
+        Ok(rows) if !rows.is_empty() => return Ok(rows),
+        // 确定性错误（Invalid symbol / Not Found 等）直接返回，不做徒劳的 crumb 握手
+        Err(e) if is_definitive_yahoo_error(&e) => {
+            return Err(format!("{}{}", e, yahoo_fallback_hint(symbol)));
         }
+        // 空数据 / 传输限流 / 区域封锁 → 走 crumb 握手重试
+        Ok(_) | Err(_) => {}
     }
 
     // 第二步：cookie + crumb 握手后重试。
     let crumb = get_crumb(client).await;
-    fetch_yahoo_chart(client, symbol, period1, period2, crumb.as_deref())
-        .await
-        .map_err(|e| {
-            format!(
-                "{}（若所在地区无法访问 Yahoo，可改用 --source eastmoney）",
-                e
-            )
-        })
+    let result = fetch_yahoo_chart(client, symbol, period1, period2, crumb.as_deref()).await;
+    if result.is_err() {
+        // 带 crumb 仍失败：crumb 可能已轮换/失效，清除缓存让后续请求重新握手
+        crate::yahoo::invalidate_crumb_cache();
+    }
+    result.map_err(|e| format!("{}{}", e, yahoo_fallback_hint(symbol)))
 }
 
 #[cfg(test)]

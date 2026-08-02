@@ -39,7 +39,8 @@ pub struct OhlcvRow {
 /// - `-USD` 后缀 → 加密货币
 /// - `.HK` 后缀 → 港股
 /// - 6位纯数字 → A股
-/// - 5位纯数字 → 港股
+/// - 4/5位纯数字 → 港股（0700、09988；`hk_to_yahoo_symbol` / `hk_eastmoney_code`
+///   均支持 4 位代码，分类器必须与其一致）
 /// - 其他 → 美股
 pub fn detect_market(symbol: &str) -> Market {
     let s = symbol.trim();
@@ -55,12 +56,75 @@ pub fn detect_market(symbol: &str) -> Market {
     if s.len() == 6 && s.chars().all(|c| c.is_ascii_digit()) {
         return Market::CNStock;
     }
+    // 4位纯数字 → 港股（如 0700）
+    if s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()) {
+        return Market::HKStock;
+    }
     // 5位纯数字 → 港股
     if s.len() == 5 && s.chars().all(|c| c.is_ascii_digit()) {
         return Market::HKStock;
     }
     // 其他 → 美股
     Market::US
+}
+
+/// A股市场 id（东方财富 secid 前缀）：6xx/9xx → 沪市(1)，其中 9xx 含 900xxx 沪B；
+/// 其余（深市 0x/2x/3x、北交所 8xx/92x）同用市场 0。
+pub fn cn_market_id(symbol: &str) -> u8 {
+    let s = symbol.trim();
+    if s.starts_with('6') || s.starts_with('9') {
+        1
+    } else {
+        0
+    }
+}
+
+/// 东方财富 push2his kline 请求公共骨架（cn/hk/us_em 三渠道共用）。
+///
+/// 构造 URL → get_with_retry → text → JSON 解析 → 取 `data.klines` 与 `data.market`。
+/// `data` 缺失或为 null（无效 secid）返回 Ok(None)，由调用方决定如何降级；
+/// 网络/解析错误返回 Err。
+/// `lmt` 为可选附加查询参数（如 `lmt=1000000`），`retries` 为 HTTP 重试次数。
+pub async fn fetch_eastmoney_kline(
+    client: &reqwest::Client,
+    secid: &str,
+    beg: &str,
+    end_fmt: &str,
+    lmt: Option<&str>,
+    retries: u32,
+) -> Result<Option<(Vec<serde_json::Value>, Option<i64>)>, String> {
+    let url = format!(
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get?\
+         fields1=f1,f2,f3,f4,f5,f6\
+         &fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116\
+         &ut=7eea3edcaed734bea9cbfc24409ed989\
+         &klt=101&fqt=1\
+         &secid={}\
+         &beg={}&end={}{}",
+        secid,
+        beg,
+        end_fmt,
+        lmt.map(|l| format!("&{l}")).unwrap_or_default()
+    );
+
+    let resp = crate::http::get_with_retry(client, &url, Some(retries))
+        .await
+        .map_err(|e| format!("东方财富 API 请求失败: {}", e))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
+
+    let root: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))?;
+
+    let data = root.get("data");
+    let market = data.and_then(|d| d.get("market")).and_then(|m| m.as_i64());
+    let klines = data
+        .and_then(|d| d.get("klines"))
+        .and_then(|k| k.as_array())
+        .cloned();
+    Ok(klines.map(|k| (k, market)))
 }
 
 /// 解析东方财富 klines 字符串数组为 OhlcvRow
@@ -165,9 +229,10 @@ pub fn hk_eastmoney_code(symbol: &str) -> String {
 }
 
 /// 美股在东方财富的 secid 候选（按常见度排序）：105=NASDAQ, 106=NYSE, 107=AMEX。
-/// 无交易所映射时由 us_em 依次尝试。
+/// 无交易所映射时由 us_em 依次尝试。symbol 做 URL 编码，防止 `&`/`?` 等
+/// 字符注入查询参数。
 fn us_eastmoney_secids(symbol: &str) -> Vec<String> {
-    let s = symbol.trim().to_uppercase();
+    let s = crate::http::url_encode(&symbol.trim().to_uppercase());
     vec![
         format!("105.{}", s),
         format!("106.{}", s),
@@ -225,6 +290,9 @@ pub async fn fetch_ohlcv(
     end: &str,
     source: Option<Source>,
 ) -> Result<Vec<OhlcvRow>, String> {
+    // 统一在入口 trim：detect_market 内部会 trim，但各渠道 URL 拼接用的是原始符号，
+    // 尾随空白会让请求失败（如 "600519 " → secid=1.600519 空格 → data:null）。
+    let symbol = symbol.trim();
     match source {
         Some(Source::Yahoo) => fetch_via_yahoo(client, symbol, start, end).await,
         Some(Source::Eastmoney) => fetch_via_eastmoney(client, symbol, start, end).await,
@@ -257,6 +325,23 @@ mod tests {
     fn test_detect_hk_stock() {
         assert_eq!(detect_market("00700.HK"), Market::HKStock);
         assert_eq!(detect_market("09988"), Market::HKStock);
+        // 4 位纯数字（修复前被误判美股）
+        assert_eq!(detect_market("0700"), Market::HKStock);
+        assert_eq!(detect_market("9988"), Market::HKStock);
+    }
+
+    #[test]
+    fn test_cn_market_id() {
+        // 沪市 6xx
+        assert_eq!(cn_market_id("600519"), 1);
+        // 沪B 900xxx（修复前被误判深市）
+        assert_eq!(cn_market_id("900901"), 1);
+        assert_eq!(cn_market_id("900901 "), 1);
+        // 深市 0x/2x/3x
+        assert_eq!(cn_market_id("000001"), 0);
+        assert_eq!(cn_market_id("300750"), 0);
+        // 北交所 8xx（与深市同市场域）
+        assert_eq!(cn_market_id("833171"), 0);
     }
 
     #[test]

@@ -90,7 +90,8 @@ fn decode_html_entities(s: &str) -> String {
             out.push('&');
             i += 1;
         } else {
-            let ch = s[i..].chars().next().unwrap();
+            // i 恒在字符边界（按 len_utf8 步进），unwrap_or 仅作防御
+            let ch = s[i..].chars().next().unwrap_or('\u{FFFD}');
             out.push(ch);
             i += ch.len_utf8();
         }
@@ -126,7 +127,7 @@ async fn fetch_yfinance_news(client: &Client, symbol: &str, days: u32, limit: u3
     let days = days.max(1);
     let url = format!(
         "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=news",
-        symbol
+        crate::http::url_encode(symbol)
     );
 
     let resp_text = match yahoo_get_body(client, &url).await {
@@ -182,11 +183,8 @@ async fn fetch_yfinance_news(client: &Client, symbol: &str, days: u32, limit: u3
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        // 时间过滤：尝试解析发布时间
-        let content_val = content_obj
-            .map(|m| Value::Object(m.clone()))
-            .unwrap_or_else(|| item.clone());
-        let pub_time = parse_news_time(&content_val);
+        // 时间过滤：尝试解析发布时间（content 嵌套与顶层字段都查，借用不克隆）
+        let pub_time = parse_news_time(item);
         if let Some(pt) = pub_time {
             if pt < cutoff {
                 continue;
@@ -210,11 +208,20 @@ async fn fetch_yfinance_news(client: &Client, symbol: &str, days: u32, limit: u3
     format!("{}{}", header, results.join("\n"))
 }
 
-/// 解析新闻发布时间
+/// 解析新闻发布时间。
+///
+/// 字段可能嵌套在 `content` 里（Yahoo v10 结构），也可能在顶层：
+/// 两者都查，只借用不克隆 content 对象。`None` 表示字段缺失或解析失败
+/// （调用方对 None 的条目保留，避免字段变更导致漏报）。
 fn parse_news_time(item: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
+    let content = item.get("content");
     // 尝试 ISO 8601 字符串
-    for field in &["pubDate", "publishTime"] {
-        if let Some(s) = item.get(field).and_then(|v| v.as_str()) {
+    for field in ["pubDate", "publishTime"] {
+        let s = content
+            .and_then(|c| c.get(field))
+            .or_else(|| item.get(field))
+            .and_then(|v| v.as_str());
+        if let Some(s) = s {
             // 尝试 ISO 格式
             if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
                 return Some(dt.with_timezone(&chrono::Utc));
@@ -226,8 +233,12 @@ fn parse_news_time(item: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
         }
     }
     // 尝试 Unix 时间戳
-    for field in &["providerPublishTime", "pubDate", "publishTime"] {
-        if let Some(n) = item.get(field).and_then(|v| v.as_f64()) {
+    for field in ["providerPublishTime", "pubDate", "publishTime"] {
+        let n = content
+            .and_then(|c| c.get(field))
+            .or_else(|| item.get(field))
+            .and_then(|v| v.as_f64());
+        if let Some(n) = n {
             let ts = if n > 1e12 {
                 (n / 1000.0) as i64
             } else {
@@ -291,17 +302,17 @@ fn parse_google_news_rss(xml: &str, query: &str, days: u32, limit: u32) -> Strin
     loop {
         match reader.read_event() {
             Ok(Event::Start(ref e)) => {
-                let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                match tag_name.as_str() {
-                    "item" => {
+                // 标签名按字节切片比较，避免每个标签一次 String 分配
+                match e.name().as_ref() {
+                    b"item" => {
                         in_item = true;
                         current_title.clear();
                         current_source.clear();
                         current_desc.clear();
                     }
-                    "title" if in_item => current_tag = "title".to_string(),
-                    "source" if in_item => current_tag = "source".to_string(),
-                    "description" if in_item => current_tag = "description".to_string(),
+                    b"title" if in_item => current_tag = "title".to_string(),
+                    b"source" if in_item => current_tag = "source".to_string(),
+                    b"description" if in_item => current_tag = "description".to_string(),
                     _ => current_tag.clear(),
                 }
             }
@@ -315,8 +326,7 @@ fn parse_google_news_rss(xml: &str, query: &str, days: u32, limit: u32) -> Strin
                 }
             }
             Ok(Event::End(ref e)) => {
-                let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                if tag_name == "item" {
+                if e.name().as_ref() == b"item" {
                     in_item = false;
                     if !current_title.is_empty() {
                         items.push(format_news_item(
@@ -500,8 +510,22 @@ fn strip_jsonp(text: &str) -> String {
 /// - 港股（.HK / 5位数字）→ 东方财富新闻（5位代码），失败降级 Google News 中文
 /// - 其他 → Yahoo Finance 新闻 + Google News，并行获取后合并输出
 ///
-/// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_news(client: &Client, symbol: &str, days: u32, limit: u32) -> String {
+/// 契约：永不 panic，错误以 Err(String) 返回（调用方不再靠字符串前缀探测错误）。
+pub async fn fetch_news(
+    client: &Client,
+    symbol: &str,
+    days: u32,
+    limit: u32,
+) -> Result<String, String> {
+    let out = fetch_news_inner(client, symbol, days, limit).await;
+    if out.starts_with("错误") {
+        Err(out)
+    } else {
+        Ok(out)
+    }
+}
+
+async fn fetch_news_inner(client: &Client, symbol: &str, days: u32, limit: u32) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();

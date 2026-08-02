@@ -59,7 +59,7 @@ This skill replicates the TradingAgents multi-agent pipeline, drawing on the ope
    | `max_debate_rounds` | 1 | 1–3 bull/bear exchanges |
    | `max_risk_discuss_rounds` | 1 | 1–3 risk-debate exchanges |
    | `output_language` | match the user's language | English or 中文 |
-   | `market` | auto-detect from ticker | 6 位纯数字（如 600519、000858）→A股, `.HK`→港股, `-USD`→Crypto, else US |
+   | `market` | auto-detect from ticker | 6 位纯数字（如 600519、000858）→A股, 4/5 位纯数字（如 0700、09988）→港股, `.HK`→港股, `-USD`→Crypto, else US |
 
 3. The user may override any default inline (e.g. "用中文输出", "run 3 debate rounds"). Honor stated preferences.
 4. Only once a ticker is confirmed, proceed to the pipeline below.
@@ -240,7 +240,7 @@ The `trad-skill` Rust binary lives in this skill's `bin/<platform>/` directory. 
 
 > **China A-share market**: `trad-skill` supports A-share data via Eastmoney APIs. Use 6-digit symbols (e.g. `600519`) directly — e.g. `trad-skill stock --symbol 600519 --tail 30`.
 >
-> **Data channel (`--source yahoo|eastmoney`)**: `stock` auto-selects the channel from the symbol (US/Crypto → Yahoo Finance, A-share/HK → Eastmoney). Pass `--source eastmoney` to route US stocks through Eastmoney when Yahoo Finance is region-blocked (symptom: `未知错误` or HTTP 403), or `--source yahoo` to force Yahoo (A-share/HK symbols are mapped to `.SS`/`.SZ`/`.HK`). Eastmoney does not serve crypto.
+> **Data channel (`--source yahoo|eastmoney`)**: `stock` auto-selects the channel from the symbol (US/Crypto → Yahoo Finance, A-share/HK → Eastmoney). For the full channel-selection table and `--source` override semantics (incl. the Yahoo-blocked-region fallback for US stocks), see `references/data-sources.md` → "Data channel selection".
 >
 > **A股优先东方财富；Yahoo 不可达时的回退**: A股的 `stock` / `fundamentals` / `news` 全部自动走东方财富（不依赖 Yahoo），直接用 6 位代码即可——A股分析应首选东方财富源。当 Yahoo Finance 不可达（症状：`未知错误` / `401 Unauthorized` / `403 Forbidden`，常见于数据中心/云 IP）时：美股行情改用 `stock --source eastmoney`；美股 `fundamentals` / `news` 没有东方财富对应源，**仅对这两部分**回退到网络搜索/浏览器工具，其余子命令仍走 `trad-skill`。
 >
@@ -290,7 +290,7 @@ Close with a summary table:
 **Market auto-detection rules**:
 
 - 6 位纯数字（如 600519、000858） → A股 (China A-shares)
-- 5 位纯数字（如 09988） → 港股 (HK stocks, 无 .HK 后缀时)
+- 4/5 位纯数字（如 0700、09988） → 港股 (HK stocks, 无 .HK 后缀时)
 - Suffix `.HK` → 港股 (HK stocks)
 - Suffix `-USD` → Crypto
 - Everything else → US stocks

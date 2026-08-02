@@ -20,7 +20,8 @@ pub fn build_client() -> Result<Client> {
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
         .connect_timeout(Duration::from_secs(10))
         .cookie_store(true)
-        .user_agent("trad-skill/1.9.0")
+        // 与 Cargo.toml 版本保持一致，避免下次发版时 UA 失同步
+        .user_agent(format!("trad-skill/{}", env!("CARGO_PKG_VERSION")))
         .build()?;
     Ok(client)
 }
@@ -70,6 +71,15 @@ pub async fn get_with_retry_headers(
             Ok(resp) if resp.status().is_success() => return Ok(resp),
             Ok(resp) => {
                 let status = resp.status();
+                // 429 时优先尊重服务端 Retry-After（秒），避免在限流窗口内继续硬撞
+                let retry_after = if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    resp.headers()
+                        .get(reqwest::header::RETRY_AFTER)
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.parse::<u64>().ok())
+                } else {
+                    None
+                };
                 // 读取并丢弃错误响应体，让连接归还连接池复用（直接 drop 会关闭连接）
                 let _ = resp.text().await;
                 let err = anyhow::anyhow!("HTTP 请求失败: {}", status);
@@ -79,7 +89,11 @@ pub async fn get_with_retry_headers(
                 }
                 last_err = Some(err);
                 if attempt < max_retries {
-                    let delay = Duration::from_secs(DEFAULT_RETRY_DELAY_SECS * 2u64.pow(attempt));
+                    let delay = match retry_after {
+                        // 上限 30s，避免服务端给超大 Retry-After 时 CLI 长时间挂起
+                        Some(secs) => Duration::from_secs(secs.min(30)),
+                        None => Duration::from_secs(DEFAULT_RETRY_DELAY_SECS * 2u64.pow(attempt)),
+                    };
                     tokio::time::sleep(delay).await;
                 }
             }

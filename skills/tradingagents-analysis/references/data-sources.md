@@ -59,8 +59,7 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **Provides**: A股 real-time quotes, historical data, financial indicators, stock comments
 - **API Key**: Not required (free, open source)
 - **Markets**: China A-shares, HK stocks
-- **Used by**: China Market Analyst, Sentiment Analyst (CN)
-- **Uses**: stock_zh_a_hist
+- **Used by**: None in the trad-skill binary — the Rust binary calls the **Eastmoney** APIs directly (same underlying protocol AKShare wraps; see Implementation Notes). Listed here for historical provenance from the TradingAgents-CN fork.
 
 ### Baostock
 - **Provides**: A股 historical K-line data, financial reports
@@ -86,28 +85,34 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **Provides**: Chinese social media sentiment analysis
 - **API Key**: Not required
 - **Markets**: A-shares
-- **Used by**: Sentiment Analyst (CN)
+- **Used by**: Sentiment Analyst (CN) — the trad-skill binary fetches 千股千评 / 机构参与度 from the Eastmoney datacenter API (the semantic equivalent of the fork's akshare sources)
 
 ## Data Source Degradation Chains
 
 ### A-Share Data (CN)
-AKShare → yfinance
+Eastmoney (default) → Yahoo Finance (via `stock --source yahoo`, symbol mapped to `.SS`/`.SZ`)
 
 ### US Stock Data
-yfinance (Yahoo Finance) → Eastmoney push2his (via `stock --source eastmoney`, for Yahoo-blocked regions)
+Yahoo Finance (default) → Eastmoney push2his (via `stock --source eastmoney`, for Yahoo-blocked regions)
 
 ### HK Stock Data
-AKShare → yfinance
+Eastmoney (default) → Yahoo Finance (via `stock --source yahoo`, symbol mapped to `.HK`)
+
+### Crypto Data
+Yahoo Finance only — Eastmoney does not support crypto, so there is no fallback channel.
 
 ### News (US)
-yfinance + Google News
+Yahoo Finance + Google News (parallel)
 
 ### News (CN)
-AKShare news (stock_news_em / 东方财富) → Google News (Chinese)
+Eastmoney search API → Google News (Chinese)
+
+### Fundamentals (US / A-share / HK)
+US/Crypto: Yahoo Finance quoteSummary v10 + fundamentals-timeseries. A-share/HK: Eastmoney push2 + datacenter. No cross-channel fallback for fundamentals.
 
 ## Configuration
 
-> **Note**: This configuration system belongs to the original TradingAgents framework. This skill's scripts do NOT read `data_vendors` / `tool_vendors` / API key env vars (except akshare which needs no key).
+> **Note**: This configuration system belongs to the original TradingAgents framework. This skill's binary does NOT read `data_vendors` / `tool_vendors` / API key env vars — all data sources are keyless public endpoints.
 
 Data sources are configured via:
 - Environment variables (API keys)

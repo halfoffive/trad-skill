@@ -34,11 +34,19 @@ fn fmt_num(v: Option<&Value>) -> String {
         }
         Some(Value::Number(n)) => {
             if let Some(f) = n.as_f64() {
-                // 大数值（如市值）直接显示原始值，小数保留 2 位
-                if f == f.round() && f.abs() > 1e6 {
+                if !f.is_finite() {
+                    "N/A".to_string()
+                } else if f == f.round() && f.abs() > 1e6 {
+                    // 大数值（如市值）直接显示原始值
                     format!("{}", n)
                 } else {
-                    format!("{:.2}", f)
+                    // 负值四舍五入成 -0.00（如 -0.0001）时归零显示
+                    let formatted = format!("{:.2}", f);
+                    if formatted == "-0.00" {
+                        "0.00".to_string()
+                    } else {
+                        formatted
+                    }
                 }
             } else {
                 n.to_string()
@@ -116,7 +124,8 @@ async fn fetch_us_fundamentals(client: &Client, symbol: &str) -> String {
     let modules = "assetProfile,financialData,defaultKeyStats,price,summaryDetail";
     let url = format!(
         "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{}?modules={}",
-        symbol, modules
+        crate::http::url_encode(symbol),
+        modules
     );
 
     let resp_text = match yahoo_get_body(client, &url).await {
@@ -262,10 +271,11 @@ async fn fetch_us_financial_table(client: &Client, symbol: &str) -> String {
     let now = chrono::Utc::now();
     let period2 = now.timestamp();
     let period1 = (now - chrono::Duration::days(365 * 5)).timestamp();
+    let encoded = crate::http::url_encode(symbol);
     let url = format!(
         "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{}?symbol={}&type={}&period1={}&period2={}",
-        symbol,
-        symbol,
+        encoded,
+        encoded,
         types.join(","),
         period1,
         period2
@@ -492,7 +502,8 @@ async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> S
 
 /// 获取A股基本面数据（东方财富 API）
 async fn fetch_cn_fundamentals(client: &Client, symbol: &str) -> String {
-    let market_id = if symbol.starts_with('6') { "1" } else { "0" };
+    // 6xx/9xx（含 900xxx 沪B）→ 沪市(1)，与行情通道 cn.rs 保持一致
+    let market_id = crate::market::cn_market_id(symbol).to_string();
     fetch_eastmoney_fundamentals(
         client,
         &EastmoneyParams {
@@ -589,8 +600,17 @@ fn build_cn_financial_table(data: &[Value]) -> String {
 /// - 6位纯数字 → A股
 /// - 其他 → 美股
 ///
-/// 契约：永不 panic，错误以字符串形式返回
-pub async fn fetch_fundamentals(client: &Client, symbol: &str) -> String {
+/// 契约：永不 panic，错误以 Err(String) 返回（调用方不再靠字符串前缀探测错误）。
+pub async fn fetch_fundamentals(client: &Client, symbol: &str) -> Result<String, String> {
+    let out = fetch_fundamentals_inner(client, symbol).await;
+    if out.starts_with("错误") {
+        Err(out)
+    } else {
+        Ok(out)
+    }
+}
+
+async fn fetch_fundamentals_inner(client: &Client, symbol: &str) -> String {
     let symbol = symbol.trim();
     if symbol.is_empty() {
         return "错误: 股票代码不能为空".to_string();
@@ -614,8 +634,9 @@ mod tests {
     #[ignore = "hits the live Yahoo Finance API"]
     async fn test_live_fundamentals_aapl() {
         let client = crate::http::build_client().unwrap();
-        let out = fetch_fundamentals(&client, "AAPL").await;
-        assert!(!out.starts_with("错误"), "AAPL 基本面不应报错: {}", out);
+        let out = fetch_fundamentals(&client, "AAPL")
+            .await
+            .unwrap_or_else(|e| panic!("AAPL 基本面不应报错: {}", e));
         assert!(out.contains("公司概况"), "应包含公司概况段落");
     }
 
@@ -624,8 +645,9 @@ mod tests {
     #[ignore = "hits the live Eastmoney API"]
     async fn test_live_fundamentals_cn() {
         let client = crate::http::build_client().unwrap();
-        let out = fetch_fundamentals(&client, "600519").await;
-        assert!(!out.starts_with("错误"), "600519 基本面不应报错: {}", out);
+        let out = fetch_fundamentals(&client, "600519")
+            .await
+            .unwrap_or_else(|e| panic!("600519 基本面不应报错: {}", e));
         assert!(out.contains("个股基本信息"), "应包含个股基本信息段落");
     }
 
@@ -705,6 +727,9 @@ mod tests {
         assert_eq!(fmt_num(Some(&json!(1.23456))), "1.23");
         assert_eq!(fmt_num(Some(&json!("Technology"))), "Technology");
         assert_eq!(fmt_num(Some(&Value::Null)), "N/A");
+        // 负值四舍五入到 -0.00 时归零显示（修复前输出 "-0.00"）
+        assert_eq!(fmt_num(Some(&json!(-0.0001))), "0.00");
+        assert_eq!(fmt_num(Some(&json!(0.0001))), "0.00");
     }
 
     // 验证 fundamentals-timeseries 响应解析为按年表格（替换空的 quoteSummary 报表模块）。
@@ -766,8 +791,9 @@ mod tests {
     #[ignore = "hits the live Eastmoney API"]
     async fn test_live_fundamentals_hk() {
         let client = crate::http::build_client().unwrap();
-        let out = fetch_fundamentals(&client, "0700.HK").await;
-        assert!(!out.starts_with("错误"), "0700.HK 基本面不应报错: {}", out);
+        let out = fetch_fundamentals(&client, "0700.HK")
+            .await
+            .unwrap_or_else(|e| panic!("0700.HK 基本面不应报错: {}", e));
         assert!(out.contains("个股基本信息"), "应包含个股基本信息段落");
         assert!(out.contains("港股基本面"), "应走港股东方财富通道而非 Yahoo");
     }

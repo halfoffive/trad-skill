@@ -11,8 +11,10 @@ use crate::market::OhlcvRow;
 /// 走的是银行家舍入（round-half-to-even），在末位恰好为 5 时结果会不同。保留显式
 /// round 以维持当前输出，切勿简化为直接 `{:.4}`。
 fn fmt_val(v: f64) -> String {
-    if v.is_finite() {
-        format!("{:.4}", (v * 10000.0).round() / 10000.0)
+    // 先乘后判：v 接近 f64::MAX 时 v*10000 会溢出为 inf，is_finite 检查必须在乘法之后
+    let scaled = v * 10000.0;
+    if scaled.is_finite() {
+        format!("{:.4}", scaled.round() / 10000.0)
     } else {
         "N/A".to_string()
     }
@@ -73,18 +75,34 @@ fn ema_alpha(data: &[f64], alpha: f64) -> Vec<f64> {
 }
 
 /// 计算 rolling std（总体标准差，ddof=0）
+///
+/// 增量维护 sum 与 sum_sq，把 O(n·period) 降到 O(n)。浮点减法可能让
+/// sum_sq - mean²·period 出现微小负值，用 max(0.0) 兜底。
 fn rolling_std(data: &[f64], period: usize) -> Vec<f64> {
     let mut result = vec![f64::NAN; data.len()];
     if data.len() < period {
         return result;
     }
-    for i in (period - 1)..data.len() {
-        let window = &data[i + 1 - period..=i];
-        let mean = window.iter().sum::<f64>() / period as f64;
-        let variance = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / period as f64;
-        result[i] = variance.sqrt();
+    let mut sum = 0.0;
+    let mut sum_sq = 0.0;
+    for &val in data.iter().take(period) {
+        sum += val;
+        sum_sq += val * val;
+    }
+    result[period - 1] = window_std(sum, sum_sq, period);
+    for i in period..data.len() {
+        sum += data[i] - data[i - period];
+        sum_sq += data[i] * data[i] - data[i - period] * data[i - period];
+        result[i] = window_std(sum, sum_sq, period);
     }
     result
+}
+
+/// 由窗口 sum/sum_sq 计算总体标准差
+fn window_std(sum: f64, sum_sq: f64, period: usize) -> f64 {
+    let mean = sum / period as f64;
+    let variance = (sum_sq / period as f64 - mean * mean).max(0.0);
+    variance.sqrt()
 }
 
 /// 计算 rolling mean
@@ -468,6 +486,27 @@ mod tests {
         assert_eq!(fmt_val(f64::INFINITY), "N/A");
         assert_eq!(fmt_val(f64::NEG_INFINITY), "N/A");
         assert_eq!(fmt_val(0.0), "0.0000");
+        // v*10000 溢出为 inf → N/A（修复前输出字面 "inf"）
+        assert_eq!(fmt_val(f64::MAX), "N/A");
+        assert_eq!(fmt_val(1e306), "N/A");
+    }
+
+    #[test]
+    fn test_rolling_std_matches_bruteforce() {
+        // 增量实现应与逐窗口直算一致（随机数据，含负值）
+        let data: Vec<f64> = (0..50).map(|i| (i as f64 * 7.0).sin() * 100.0).collect();
+        let inc = rolling_std(&data, 10);
+        for i in 9..data.len() {
+            let window = &data[i + 1 - 10..=i];
+            let mean = window.iter().sum::<f64>() / 10.0;
+            let variance = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / 10.0;
+            assert!(
+                (inc[i] - variance.sqrt()).abs() < 1e-9,
+                "窗口 {i} 不匹配: {} vs {}",
+                inc[i],
+                variance.sqrt()
+            );
+        }
     }
 
     #[test]
