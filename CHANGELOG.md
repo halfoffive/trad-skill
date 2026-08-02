@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.2] - 2026-08-02
+
+### Fixed
+
+- **北交所 920xxx 路由错误**：`cn_market_id` 改用 `starts_with("900")` 精确匹配沪B，北交所 920xxx 代码正确路由到市场 0（此前 `starts_with('9')` 误判为沪市）。
+- **港股 symbol 注入防护**：`hk_eastmoney_code` 添加纯数字校验，非数字输入返回安全占位码（防止 `&`/`?` 注入东方财富 URL 查询参数）。
+- **安装器健壮性**：过滤空 `USERPROFILE`/`HOME` 环境变量（防止 CI/容器下静默安装到 cwd 相对路径）；`--skills-dir` 改用 `expand_tilde`（与 `--dir` 一致）；SKILL.md 标记检查改用 `.is_file()`；rename 失败时清理临时目录并报告备份路径；`--no-bin` 时不再创建空 `bin/` 目录。
+- **CLI 参数互斥**：顶层 `--dir`/`--agent` 添加 `conflicts_with`，在 clap 解析层即报错（此前仅运行时检查）。
+- **HTTP 健壮性**：新增 `text_limited()` 响应体大小限制（50 MB），防止上游异常导致 OOM；指数退避 `2u64.pow(attempt.min(6))` 防止溢出 panic。
+- **Yahoo crumb 缓存 TTL**：添加 1 小时过期机制，过期后主动刷新（此前缓存永不过期，crumb 轮换后可能持续失败）。
+- **CN/HK 基本面退出码**：全部数据源失败时返回 Err（exit 1），与美股行为一致（此前返回 Ok + exit 0）。
+- **JS launcher**：仅剥离首个位置参数 `install`（此前 `filter(a !== 'install')` 误删 `--dir install` 等合法值）。
+
 ## [1.9.1] - 2026-08-02
 
 ### Fixed
