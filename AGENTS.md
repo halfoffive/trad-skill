@@ -43,12 +43,13 @@ Deprecated: the third-party `npx skills add halfoffive/trad-skill ...` flow (ver
 
 ## Installer (`package.json` + `bin/trad-skill.js` + Rust binary)
 
-The installer logic is **Rust**, in `crates/trad-data/src/install.rs`. The compiled binary is named `trad-skill`; invoking it with no subcommand defaults to the install flow, and an explicit `install` subcommand is also accepted. The npm `trad-skill` bin entry is a zero-logic CJS launcher (`bin/trad-skill.js`) that resolves the platform binary and execs it. When the first user arg is a data subcommand (`stock`/`news`/`fundamentals`/`sentiment`) or `install`, args are passed through verbatim; otherwise the launcher prepends `install --skills-dir <pkgRoot>/skills/tradingagents-analysis`.
+The installer logic is **Rust**, in `crates/trad-data/src/install.rs`. The compiled binary is named `trad-skill`; invoking it with no subcommand defaults to the install flow, and an explicit `install` subcommand is also accepted. The npm `trad-skill` bin entry is a zero-logic CJS launcher (`bin/trad-skill.js`) that resolves the platform binary and execs it. Data subcommands (`stock`/`news`/`fundamentals`/`sentiment`) are passed through verbatim; for install mode (implicit or explicit `install`), the launcher injects `--skills-dir <pkgRoot>/skills/tradingagents-analysis` — the Rust binary's built-in default is a build-machine path and must never be used on user machines. A user-supplied `--skills-dir` wins over the injected one (clap self-override).
 
 - Copies `skills/tradingagents-analysis/` into the target agent's skills dir. **Default target: `~/.agents/skills`** (generic agent directory). Flags: `--dir <path>`, `--agent claude|agents|opencode` (mutually exclusive).
-- Copies the platform binary into `bin/<node-platform-key>/` via **self-copy** (`std::env::current_exe()`). `--bin-path` / `--no-bin` override.
-- Idempotent (removes existing dir first). `--dry-run` prints the plan without writing.
-- `node_platform_key()` in `install.rs` maps rustc target consts → node platform/arch naming; this key MUST match `bin/trad-skill.js` strategy-1 path. Keep them in sync (unit-tested).
+- Copies the platform binary into `bin/<node-platform-key>/` via **self-copy** (`std::env::current_exe()`). `--bin-path` / `--no-bin` override. If the binary fails to copy and `--no-bin` was not given, the install exits non-zero.
+- Idempotent with data-safety: an existing destination is only replaced when it contains `SKILL.md` (a prior install marker); otherwise the install bails. Replacement is atomic-ish: copy to a sibling temp dir, rename the old install aside, swap into place. `--dry-run` prints the plan without writing.
+- On Windows, the install target prefers `USERPROFILE` (Git Bash/CI shells set `HOME` to POSIX-style paths that Rust resolves to a bogus drive-root location).
+- `node_platform_key()` in `install.rs` maps rustc target consts → node platform/arch naming; the launcher resolves the platform binary via the npm optionalDependency `@trad-skill/<key>` (the old strategy-1 local-binary lookup was removed — the tarball's `bin/` only ships the JS launcher). Keep the key and the 5 npm package names in sync (unit-tested).
 - The `files` field in `package.json` controls what bunx/npx packs: `bin/`, `skills/`, and the doc/LICENSE files.
 
 ## Source repos (read-only reference)

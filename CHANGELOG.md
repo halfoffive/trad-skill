@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **安装器数据安全**：目标目录已存在但缺 `SKILL.md`（非本技能安装）时拒绝覆盖，不再无条件 `remove_dir_all` 误删用户目录；`--skills-dir` 指向已安装副本（源==目标）时直接报错；复制改为「临时目录 + 换名就位」，中途失败不破坏上一次可用安装。
+- **安装目标路径**：Windows 下优先 `USERPROFILE`（Git Bash/CI 的 `HOME` 是 POSIX 路径，会被解析到错误的盘符根目录）；平台二进制复制失败且未指定 `--no-bin` 时以非零码退出，不再打印"已安装"后退出 0。
+- **`bunx trad-skill@latest install`**：显式 `install` 子命令此前被透传、回落到构建机路径而必然失败；现在 launcher 同样注入 `--skills-dir`（用户自带的后者胜）。`--version` 经 launcher 可用。
+- **CLI 参数校验**：`--start`/`--end` 统一按 `YYYY-MM-DD` 校验（格式错误、`end < start`、未来日期 → 明确报错，退出码 2）；`--tail` 收敛到 [1, 500]；`--limit 0` 报错。
+- **退出码**：参数错误=2、取数/网络失败=1（此前全部为 1，`--raw` 空数据甚至退出 0）；`fundamentals`/`news`/`sentiment` 改由 `Result` 边界区分错误，不再依赖 `错误:` 字符串前缀探测。
+- **A股成交量单位**：东方财富 A 股渠道的成交量单位是手（1 手=100 股），已统一换算为股，与 Yahoo 渠道一致（此前系统性小 100 倍）。
+- **市场识别**：4 位纯数字（如 `0700`）正确识别为港股（此前误判美股）；`900xxx`（沪B）正确路由到沪市；symbol 入口统一 trim，尾随空白不再导致请求失败。
+- **Yahoo crumb 握手**：`Invalid symbol` 等确定性错误不再白白做两次握手请求；HTTP 200 但响应体带 `finance`/`quoteSummary` 错误的形态现在也会触发 crumb 重试；crumb 进程级缓存（批量取数只握手一次），带 crumb 请求失败自动失效重取。
+- **东方财富美股通道**：校验响应 `market` 字段与请求交易所前缀一致，避免同名代码取到另一家公司的数据。
+- **其他**：URL 统一百分号编码（symbol 含 `&`/`?` 不再注入查询参数）；Reddit 源改走共享重试 + 浏览器 UA；`fmt_val`/`fmt_num` 不再输出 `inf`/`-0.00`；RSI 持平市场返回中性 50；空数据报告不再以 0 退出。
+
+### Changed
+
+- 依赖裁剪：`tokio` 由 `full` 收敛为 `rt`/`rt-multi-thread`/`macros`/`time`；`serde`/`chrono` 去掉未用 feature；release 增加 `panic = "abort"`。
+- HTTP 默认 User-Agent 由 `CARGO_PKG_VERSION` 生成，不再硬编码版本号；429 响应优先遵循 `Retry-After`（上限 30s）。
+- 东方财富 kline 抓取骨架提取为 `fetch_eastmoney_kline` 公共函数，消除 cn/hk/us_em 三处约 90 行重复。
+- 技能文档：`indicators.md`/`prompts/README.md`/`data-sources.md` 中已删除 Python 脚本的引用全部改写为 `trad-skill` 子命令；市场自动检测规则在 SKILL.md §2/§8 与代码保持一致。
+- 发布流程：npm-publish 按解析出的 tag checkout，并在发布前校验 6 个 npm manifest + Cargo.toml 与 tag 版本一致；changelog 提取改为字面精确匹配；`aarch64-pc-windows-msvc` 构建固定 `windows-2025` 镜像。
+
 ## [1.9.0] - 2026-08-02
 
 ### Added
