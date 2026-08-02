@@ -7,17 +7,21 @@
 use crate::http::get_with_retry_headers;
 use reqwest::Client;
 use std::sync::Mutex;
+use std::time::Instant;
 
 /// 浏览器 User-Agent：Yahoo 会封锁非浏览器 UA（尤其数据中心 IP），
 /// 所有 Yahoo 请求必须携带真实浏览器 UA。
 pub const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-/// 进程级 crumb 缓存：批量抓多个 symbol 时只握手一次（每次握手 2 个请求）。
-/// crumb 有效期数小时；带 crumb 请求失败时调用方应 `invalidate_crumb_cache()`，
-/// 让后续请求重新握手。
-static CRUMB_CACHE: Mutex<Option<String>> = Mutex::new(None);
+/// Crumb 缓存 TTL（秒）：Yahoo crumb 有效期数小时，1 小时后主动刷新避免使用过期 crumb。
+const CRUMB_TTL_SECS: u64 = 3600;
 
-fn crumb_cache() -> std::sync::MutexGuard<'static, Option<String>> {
+/// 进程级 crumb 缓存：批量抓多个 symbol 时只握手一次（每次握手 2 个请求）。
+/// 含时间戳用于 TTL 过期判断；带 crumb 请求失败时调用方应 `invalidate_crumb_cache()`，
+/// 让后续请求重新握手。
+static CRUMB_CACHE: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+
+fn crumb_cache() -> std::sync::MutexGuard<'static, Option<(String, Instant)>> {
     // 锁中毒（panic 后）视为空缓存，不 panic
     CRUMB_CACHE.lock().unwrap_or_else(|p| p.into_inner())
 }
@@ -32,15 +36,19 @@ pub fn invalidate_crumb_cache() {
 /// 流程：先访问 fc.yahoo.com 种 cookie（cookie store 自动保存），
 /// 再用同一 cookie 请求 v1/test/getcrumb 取得 crumb 字符串。
 /// 任一步失败返回 None（调用方仍可尝试无 crumb 请求）。
-/// 成功后写入进程级缓存；`invalidate_crumb_cache` 清空。
+/// 成功后写入进程级缓存（含 TTL）；`invalidate_crumb_cache` 清空。
 pub async fn get_crumb(client: &Client) -> Option<String> {
-    // 缓存命中直接返回，避免每个 symbol 都做两次握手请求
-    if let Some(c) = crumb_cache().clone() {
-        return Some(c);
+    // 缓存命中且未过期直接返回，避免每个 symbol 都做两次握手请求
+    if let Some((c, ts)) = crumb_cache().clone() {
+        if ts.elapsed().as_secs() < CRUMB_TTL_SECS {
+            return Some(c);
+        }
+        // TTL 过期，清除并重新握手
+        *crumb_cache() = None;
     }
     let crumb = get_crumb_fresh(client).await;
     if crumb.is_some() {
-        *crumb_cache() = crumb.clone();
+        *crumb_cache() = crumb.clone().map(|c| (c, Instant::now()));
     }
     crumb
 }
@@ -132,8 +140,7 @@ pub async fn yahoo_get_body(client: &Client, url: &str) -> Result<String, String
     let resp = get_with_retry_headers(client, &url2, &[("User-Agent", BROWSER_UA)], Some(2))
         .await
         .map_err(|e| format!("Yahoo Finance 请求失败: {}", e))?;
-    let body = resp
-        .text()
+    let body = crate::http::text_limited(resp)
         .await
         .map_err(|e| format!("读取响应失败: {}", e))?;
     if body_has_yahoo_error(&body) {

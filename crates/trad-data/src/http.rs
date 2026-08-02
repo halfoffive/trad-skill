@@ -11,6 +11,9 @@ const DEFAULT_RETRIES: u32 = 3;
 /// 默认重试间隔（秒）
 const DEFAULT_RETRY_DELAY_SECS: u64 = 1;
 
+/// 响应体最大字节数（50 MB）：防止上游异常/被攻破时发送超大响应导致 OOM。
+const MAX_RESPONSE_BYTES: usize = 50 * 1024 * 1024;
+
 /// 构建带超时配置的 reqwest HTTP 客户端
 ///
 /// 启用 cookie store：Yahoo Finance 的 crumb 握手需要先种 cookie 再取 crumb，
@@ -92,7 +95,9 @@ pub async fn get_with_retry_headers(
                     let delay = match retry_after {
                         // 上限 30s，避免服务端给超大 Retry-After 时 CLI 长时间挂起
                         Some(secs) => Duration::from_secs(secs.min(30)),
-                        None => Duration::from_secs(DEFAULT_RETRY_DELAY_SECS * 2u64.pow(attempt)),
+                        None => {
+                            Duration::from_secs(DEFAULT_RETRY_DELAY_SECS * 2u64.pow(attempt.min(6)))
+                        }
                     };
                     tokio::time::sleep(delay).await;
                 }
@@ -100,7 +105,8 @@ pub async fn get_with_retry_headers(
             Err(e) => {
                 last_err = Some(anyhow::anyhow!("HTTP 请求异常: {}", e));
                 if attempt < max_retries {
-                    let delay = Duration::from_secs(DEFAULT_RETRY_DELAY_SECS * 2u64.pow(attempt));
+                    let delay =
+                        Duration::from_secs(DEFAULT_RETRY_DELAY_SECS * 2u64.pow(attempt.min(6)));
                     tokio::time::sleep(delay).await;
                 }
             }
@@ -125,6 +131,34 @@ pub fn url_encode(s: &str) -> String {
         }
     }
     result
+}
+
+/// 读取响应体文本，带大小上限防护（默认 50 MB）。
+///
+/// 先检查 Content-Length（若服务端提供），超限立即拒绝避免下载；
+/// 无 Content-Length 时读取 bytes 后检查实际长度。
+/// 返回 `Result<String, String>`（与数据模块错误类型一致）。
+pub async fn text_limited(resp: reqwest::Response) -> Result<String, String> {
+    if let Some(len) = resp.content_length() {
+        if len as usize > MAX_RESPONSE_BYTES {
+            return Err(format!(
+                "响应体过大（{} 字节，上限 {}）",
+                len, MAX_RESPONSE_BYTES
+            ));
+        }
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
+    if bytes.len() > MAX_RESPONSE_BYTES {
+        return Err(format!(
+            "响应体过大（{} 字节，上限 {}）",
+            bytes.len(),
+            MAX_RESPONSE_BYTES
+        ));
+    }
+    String::from_utf8(bytes.to_vec()).map_err(|e| format!("响应体非有效 UTF-8: {}", e))
 }
 
 #[cfg(test)]
