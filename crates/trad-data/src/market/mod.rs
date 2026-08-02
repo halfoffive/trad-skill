@@ -96,10 +96,23 @@ pub fn parse_eastmoney_klines(
             }
         }
 
-        let open: f64 = fields[1].parse().unwrap_or(0.0);
-        let close: f64 = fields[2].parse().unwrap_or(0.0);
-        let high: f64 = fields[3].parse().unwrap_or(0.0);
-        let low: f64 = fields[4].parse().unwrap_or(0.0);
+        let open: f64 = match fields[1].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let close: f64 = match fields[2].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let high: f64 = match fields[3].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let low: f64 = match fields[4].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        // 成交量缺失允许为 0（停牌等情况），不跳过整行
         let volume: f64 = fields[5].parse().unwrap_or(0.0);
 
         rows.push(OhlcvRow {
@@ -288,6 +301,20 @@ mod tests {
         ];
         let rows = parse_eastmoney_klines(&klines, None);
         assert_eq!(rows.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_eastmoney_klines_skip_bad_ohlc() {
+        // OHLC 字段无法解析的行应跳过，而非回落为 0.0 污染序列
+        let klines = vec![
+            serde_json::json!("2024-01-01,abc,11,12,9,100"), // open 非法
+            serde_json::json!("2024-01-02,10,xyz,12,9,100"), // close 非法
+            serde_json::json!("2024-01-03,10,11,12,9,100"),  // 合法
+        ];
+        let rows = parse_eastmoney_klines(&klines, None);
+        assert_eq!(rows.len(), 1, "仅 1 行合法: {:?}", rows);
+        assert_eq!(rows[0].date, "2024-01-03");
+        assert!((rows[0].open - 10.0).abs() < 1e-10);
     }
 
     #[test]

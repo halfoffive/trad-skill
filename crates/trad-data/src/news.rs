@@ -48,7 +48,11 @@ fn format_news_item(title: &str, source: &str, summary: &str) -> String {
     lines.join("\n")
 }
 
-/// 清除 HTML 标签（简单实现：移除 <...> 内容）
+/// 清除 HTML 标签（简单实现：移除 <...> 内容）并解码常见 HTML 实体。
+///
+/// 顺序：先剥标签，再解码实体。若先解码会把 `&lt;`/`&gt;` 还原成 `<`/`>` 而
+/// 被剥标签逻辑误删。支持命名实体（`&amp;`/`&lt;`/`&gt;`/`&quot;`/`&apos;`/`&nbsp;`）
+/// 与数字实体（`&#39;`/`&#x27;`），未知实体原样保留。
 fn strip_html(html: &str) -> String {
     let mut result = String::with_capacity(html.len());
     let mut in_tag = false;
@@ -61,7 +65,58 @@ fn strip_html(html: &str) -> String {
             result.push(ch);
         }
     }
-    result.trim().to_string()
+    decode_html_entities(result.trim())
+}
+
+/// 解码常见 HTML 实体。`&` 后 15 个字符内无 `;` 视作字面 `&`。
+fn decode_html_entities(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'&' {
+            // 在合理窗口内寻找 ';'
+            let tail = &s[i..];
+            if let Some(rel) = tail.find(';') {
+                if rel <= 15 {
+                    let entity = &tail[1..rel];
+                    if let Some(decoded) = decode_one_entity(entity) {
+                        out.push_str(&decoded);
+                        i += rel + 1;
+                        continue;
+                    }
+                }
+            }
+            out.push('&');
+            i += 1;
+        } else {
+            let ch = s[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    out
+}
+
+/// 解码单个实体（不含首尾的 `&` / `;`）。未知返回 None。
+fn decode_one_entity(entity: &str) -> Option<String> {
+    match entity {
+        "amp" => Some("&".to_string()),
+        "lt" => Some("<".to_string()),
+        "gt" => Some(">".to_string()),
+        "quot" => Some("\"".to_string()),
+        "apos" => Some("'".to_string()),
+        "nbsp" => Some(" ".to_string()),
+        _ => {
+            let num = entity.strip_prefix('#')?;
+            let code = if let Some(hex) = num.strip_prefix('x').or_else(|| num.strip_prefix('X')) {
+                u32::from_str_radix(hex, 16).ok()
+            } else {
+                num.parse::<u32>().ok()
+            };
+            code.and_then(char::from_u32).map(|c| c.to_string())
+        }
+    }
 }
 
 // ───────────────────────── Yahoo Finance 新闻 ─────────────────────────
@@ -496,6 +551,17 @@ mod tests {
         assert_eq!(strip_html("no tags"), "no tags");
         assert_eq!(strip_html("<a href='url'>link</a>"), "link");
         assert_eq!(strip_html(""), "");
+        // HTML 实体解码
+        assert_eq!(strip_html("a &amp; b"), "a & b");
+        assert_eq!(strip_html("price &lt; 5 &gt; 3"), "price < 5 > 3");
+        assert_eq!(strip_html("it&#39;s"), "it's");
+        assert_eq!(strip_html("a&nbsp;b"), "a b");
+        assert_eq!(strip_html("<b>A&amp;B</b>"), "A&B");
+        // &lt;/&gt; 在标签外应解码为字面 < >，而非被当标签删除
+        assert_eq!(strip_html("&lt;not a tag&gt;"), "<not a tag>");
+        // 字面 &（非实体）与未知实体保留
+        assert_eq!(strip_html("Tom & Jerry"), "Tom & Jerry");
+        assert_eq!(strip_html("foo &bar; baz"), "foo &bar; baz");
     }
 
     #[test]

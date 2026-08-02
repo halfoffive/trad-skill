@@ -6,14 +6,13 @@ pub struct ReportOptions {
     pub tail: u32,
     pub indicators: bool,
     pub stats: bool,
-    pub raw: bool,
 }
 
 /// 构建精简报告（对齐 Python build_compact_report）
 ///
 /// 默认模式：指标快照表 + 尾部 OHLCV（默认30行）
 /// `stats` 模式：附加区间统计
-/// `raw` 模式：纯 CSV 输出
+/// （`--raw` 纯 CSV 输出由调用方直接走 `ohlcv_to_csv`，不经过本函数）
 pub fn build_compact_report(
     symbol: &str,
     start: &str,
@@ -26,11 +25,6 @@ pub fn build_compact_report(
             "错误: 未获取到 {} 在 {} 至 {} 的数据，请检查代码和日期范围。",
             symbol, start, end
         );
-    }
-
-    // --raw 模式：纯 CSV 输出
-    if opts.raw {
-        return ohlcv_to_csv(data);
     }
 
     let mut sections: Vec<String> = Vec::new();
@@ -99,24 +93,9 @@ mod tests {
             tail: 30,
             indicators: true,
             stats: false,
-            raw: false,
         };
         let result = build_compact_report("AAPL", "2024-01-01", "2024-06-30", &[], &opts);
         assert!(result.contains("错误"));
-    }
-
-    #[test]
-    fn test_raw_mode() {
-        let data = vec![row("2024-01-01", 100.0), row("2024-01-02", 101.0)];
-        let opts = ReportOptions {
-            tail: 30,
-            indicators: false,
-            stats: false,
-            raw: true,
-        };
-        let result = build_compact_report("AAPL", "2024-01-01", "2024-01-02", &data, &opts);
-        assert!(result.starts_with("Date,Open,High,Low,Close,Volume"));
-        assert!(!result.contains("技术指标"));
     }
 
     #[test]
@@ -134,7 +113,6 @@ mod tests {
             tail: 10,
             indicators: false,
             stats: false,
-            raw: false,
         };
         let result = build_compact_report("TEST", "d0", "d49", &data, &opts);
         assert!(result.contains("最近 10 行"));

@@ -28,7 +28,7 @@ const localBinary = path.join(__dirname, platformDir, binName);
 let npmBinary = null;
 try {
   npmBinary = require.resolve(`@trad-skill/${platformDir}/${binName}`);
-} catch (e) {
+} catch {
   // 非 npm 上下文，或平台包未安装
 }
 

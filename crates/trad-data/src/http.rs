@@ -36,9 +36,22 @@ pub async fn get_with_retry(
     get_with_retry_headers(client, url, &[], retries).await
 }
 
+/// 判断给定 HTTP 状态码是否值得重试。
+///
+/// 4xx（除 429 限流外）是客户端错误，重试不会改变结果，应立即失败；
+/// 5xx 服务端错误与 429 限流才重试。3xx 由 reqwest 自动跟随，不会走到这里。
+fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+    if status.is_client_error() {
+        return status.as_u16() == 429;
+    }
+    true
+}
+
 /// 带重试的 GET 请求，每次尝试附加自定义请求头
 ///
 /// 用于需要覆盖默认 User-Agent 的场景（如 Yahoo Finance 需要浏览器 UA）。
+/// 仅在 5xx / 429 / 传输层错误时重试；4xx（除 429）立即失败，避免对
+/// 401/403/404 等不可恢复错误做无意义退避等待。
 pub async fn get_with_retry_headers(
     client: &Client,
     url: &str,
@@ -59,7 +72,12 @@ pub async fn get_with_retry_headers(
                 let status = resp.status();
                 // 读取并丢弃错误响应体，让连接归还连接池复用（直接 drop 会关闭连接）
                 let _ = resp.text().await;
-                last_err = Some(anyhow::anyhow!("HTTP 请求失败: {}", status));
+                let err = anyhow::anyhow!("HTTP 请求失败: {}", status);
+                // 4xx（除 429）不可恢复，立即返回，不退避
+                if !is_retryable_status(status) {
+                    return Err(err);
+                }
+                last_err = Some(err);
                 if attempt < max_retries {
                     let delay = Duration::from_secs(DEFAULT_RETRY_DELAY_SECS * 2u64.pow(attempt));
                     tokio::time::sleep(delay).await;
@@ -107,5 +125,21 @@ mod tests {
         assert_eq!(url_encode("a+b/c"), "a%2Bb%2Fc");
         // 非 ASCII（中文）按 UTF-8 字节编码
         assert_eq!(url_encode("腾讯"), "%E8%85%BE%E8%AE%AF");
+    }
+
+    #[test]
+    fn test_is_retryable_status() {
+        use reqwest::StatusCode;
+        // 4xx（除 429）不可重试
+        assert!(!is_retryable_status(StatusCode::BAD_REQUEST)); // 400
+        assert!(!is_retryable_status(StatusCode::UNAUTHORIZED)); // 401
+        assert!(!is_retryable_status(StatusCode::FORBIDDEN)); // 403
+        assert!(!is_retryable_status(StatusCode::NOT_FOUND)); // 404
+                                                              // 429 限流可重试
+        assert!(is_retryable_status(StatusCode::TOO_MANY_REQUESTS));
+        // 5xx 服务端错误可重试
+        assert!(is_retryable_status(StatusCode::INTERNAL_SERVER_ERROR)); // 500
+        assert!(is_retryable_status(StatusCode::BAD_GATEWAY)); // 502
+        assert!(is_retryable_status(StatusCode::SERVICE_UNAVAILABLE)); // 503
     }
 }
