@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.9.0] - 2026-08-02
 
 ### Added
 
@@ -21,6 +21,12 @@ All notable changes to this project will be documented in this file.
 
 - 移除死字段 `ReportOptions.raw`（恒为 false：`--raw` 走 `ohlcv_to_csv` 直连分支，从不经过 `build_compact_report`）及其死分支与 `test_raw_mode`。
 - `bin/trad-skill.js` 移除未使用的 `catch (e)` 形参。
+
+### Notes
+
+- `package.json` `version`: `1.8.6` -> `1.9.0`（+ 5 个 `optionalDependencies` `@trad-skill/*` pin）。
+- `crates/trad-data/Cargo.toml` `version`: `1.8.6` -> `1.9.0`。
+- 5 个 `npm/<platform>/package.json` `version`: `1.8.6` -> `1.9.0`。
 
 ## [1.8.6] - 2026-08-02
 
