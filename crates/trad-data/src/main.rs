@@ -220,6 +220,10 @@ async fn main() -> anyhow::Result<()> {
                 // 默认模式：精简报告（指标 + 尾部 OHLCV）
                 match market::fetch_ohlcv(&client, &symbol, &start_date, &end_date, source).await {
                     Ok(data) => {
+                        if data.is_empty() {
+                            // 空数据按取数失败处理（exit 1），而不是打印"错误"报告后 exit 0
+                            exit_with(1, &format!("错误: 未获取到 {} 的数据", symbol));
+                        }
                         let opts = format::ReportOptions {
                             tail,
                             indicators: use_indicators,

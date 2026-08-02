@@ -82,7 +82,10 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
         .and_then(|v| v.as_array())
         .ok_or("缺少 volume")?;
 
-    let mut rows = Vec::new();
+    let mut rows = Vec::with_capacity(timestamps.len());
+    // 辅助函数：从 JSON 数组中取 f64 值，null 则跳过（提升到循环外，避免每行重建闭包）
+    let get_f64 =
+        |arr: &Vec<Value>, idx: usize| -> Option<f64> { arr.get(idx).and_then(|v| v.as_f64()) };
     for (i, ts_val) in timestamps.iter().enumerate() {
         // 提取时间戳并转为日期字符串。
         // ts 非 i64（null/异常）或时间戳非法时跳过该行，避免生成 1970-01-01 假数据。
@@ -91,10 +94,6 @@ fn parse_yahoo_response(symbol: &str, body: &str) -> Result<Vec<OhlcvRow>, Strin
             continue;
         };
         let date = dt.format("%Y-%m-%d").to_string();
-
-        // 辅助函数：从 JSON 数组中取 f64 值，null 则跳过
-        let get_f64 =
-            |arr: &Vec<Value>, idx: usize| -> Option<f64> { arr.get(idx).and_then(|v| v.as_f64()) };
 
         // 如果关键字段为 null（停牌日），跳过该行
         let (Some(o), Some(h), Some(l), Some(c)) = (

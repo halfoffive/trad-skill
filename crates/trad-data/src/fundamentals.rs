@@ -34,11 +34,19 @@ fn fmt_num(v: Option<&Value>) -> String {
         }
         Some(Value::Number(n)) => {
             if let Some(f) = n.as_f64() {
-                // 大数值（如市值）直接显示原始值，小数保留 2 位
-                if f == f.round() && f.abs() > 1e6 {
+                if !f.is_finite() {
+                    "N/A".to_string()
+                } else if f == f.round() && f.abs() > 1e6 {
+                    // 大数值（如市值）直接显示原始值
                     format!("{}", n)
                 } else {
-                    format!("{:.2}", f)
+                    // 负值四舍五入成 -0.00（如 -0.0001）时归零显示
+                    let formatted = format!("{:.2}", f);
+                    if formatted == "-0.00" {
+                        "0.00".to_string()
+                    } else {
+                        formatted
+                    }
                 }
             } else {
                 n.to_string()
@@ -719,6 +727,9 @@ mod tests {
         assert_eq!(fmt_num(Some(&json!(1.23456))), "1.23");
         assert_eq!(fmt_num(Some(&json!("Technology"))), "Technology");
         assert_eq!(fmt_num(Some(&Value::Null)), "N/A");
+        // 负值四舍五入到 -0.00 时归零显示（修复前输出 "-0.00"）
+        assert_eq!(fmt_num(Some(&json!(-0.0001))), "0.00");
+        assert_eq!(fmt_num(Some(&json!(0.0001))), "0.00");
     }
 
     // 验证 fundamentals-timeseries 响应解析为按年表格（替换空的 quoteSummary 报表模块）。
