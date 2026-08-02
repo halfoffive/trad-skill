@@ -39,7 +39,9 @@ pub struct InstallArgs {
 
     /// 源技能目录（含 SKILL.md 的 tradingagents-analysis 目录）。
     /// 生产环境由 JS launcher 注入；dev 下默认相对 CARGO_MANIFEST_DIR。
-    #[arg(long = "skills-dir")]
+    /// `overrides_with` 自引用：launcher 注入一个默认值后，用户自带的
+    /// --skills-dir 是后者胜，而不是报"参数重复"。
+    #[arg(long = "skills-dir", overrides_with = "skills_dir")]
     pub skills_dir: Option<String>,
 
     /// 要复制的平台二进制路径。默认取当前运行的可执行文件（self-copy）。
@@ -568,6 +570,24 @@ mod tests {
             "arch 部分 {0} 应为 x64/arm64",
             parts[1]
         );
+    }
+
+    #[test]
+    fn top_level_install_flags_survive_explicit_subcommand() {
+        use crate::Cli;
+        use clap::Parser;
+        // 顶层 --agent 在显式 install 子命令下不应丢失（合并逻辑）
+        let cli = Cli::try_parse_from(["trad-skill", "--agent", "claude", "install"]).unwrap();
+        let args = cli.into_install_args();
+        assert!(matches!(args.agent, Some(AgentTarget::Claude)));
+        // 子命令级显式参数优先
+        let cli = Cli::try_parse_from(["trad-skill", "install", "--agent", "opencode"]).unwrap();
+        let args = cli.into_install_args();
+        assert!(matches!(args.agent, Some(AgentTarget::Opencode)));
+        // 无子命令：顶层 flag 生效
+        let cli = Cli::try_parse_from(["trad-skill", "--dry-run"]).unwrap();
+        let args = cli.into_install_args();
+        assert!(args.dry_run);
     }
 
     #[test]

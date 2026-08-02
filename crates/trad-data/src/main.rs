@@ -15,7 +15,8 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "trad-skill",
     about = "TradingAgents skill: installer + data fetcher",
-    version
+    version,
+    propagate_version = true
 )]
 struct Cli {
     /// 目标 agent：claude | agents | opencode（默认 agents）。仅 install 模式生效。
@@ -27,7 +28,8 @@ struct Cli {
     dir: Option<String>,
 
     /// 源技能目录。仅 install 模式生效。
-    #[arg(long = "skills-dir", global = true)]
+    /// `overrides_with` 自引用：launcher 注入默认值后用户自带的 --skills-dir 后者胜。
+    #[arg(long = "skills-dir", global = true, overrides_with = "skills_dir")]
     skills_dir: Option<String>,
 
     /// 要复制的平台二进制路径。默认 self-copy。仅 install 模式生效。
@@ -105,10 +107,20 @@ enum Commands {
 }
 
 impl Cli {
-    /// 把顶层平铺的 install flags 收集为 InstallArgs（显式 `install` 子命令优先）。
+    /// 把顶层平铺的 install flags 收集为 InstallArgs。
+    /// 显式 `install` 子命令优先，但子命令未显式给定的字段回落到顶层 flag，
+    /// 避免 `trad-skill --agent claude install` 把顶层 --agent 静默丢掉。
     fn into_install_args(self) -> install::InstallArgs {
         match self.command {
-            Some(Commands::Install { args }) => args,
+            Some(Commands::Install { args }) => install::InstallArgs {
+                agent: args.agent.or(self.agent),
+                dir: args.dir.or(self.dir),
+                skills_dir: args.skills_dir.or(self.skills_dir),
+                wrapper: args.wrapper,
+                bin_path: args.bin_path.or(self.bin_path),
+                no_bin: args.no_bin || self.no_bin,
+                dry_run: args.dry_run || self.dry_run,
+            },
             _ => install::InstallArgs {
                 agent: self.agent,
                 dir: self.dir,
