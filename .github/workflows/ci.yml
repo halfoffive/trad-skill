@@ -64,8 +64,9 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             use-cross: false
+          # aarch64 MSVC 交叉链接器依赖镜像预装工具链，固定镜像版本抗漂移
           - target: aarch64-pc-windows-msvc
-            os: windows-latest
+            os: windows-2025
             use-cross: false
 
     steps:
