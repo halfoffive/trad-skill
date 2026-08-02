@@ -327,7 +327,9 @@ fn format_cn_comment_table(data: &[Value]) -> String {
     // 表头
     let header: Vec<&str> = indicators.iter().map(|(d, _, _)| *d).collect();
     lines.push(format!("| {} |", header.join(" | ")));
-    lines.push(format!("|{}|", "---|".repeat(indicators.len())));
+    // 分隔行：N 列需 N+1 个 `|`。`"---|".repeat(N)` 末尾已带 `|`，
+    // 外层再补 `|` 会产生尾随 `||`，使分隔行列数多于表头/数据行。
+    lines.push(format!("|{}", "---|".repeat(indicators.len())));
 
     for row in data.iter().take(display_count) {
         let mut cells = Vec::new();
@@ -463,6 +465,15 @@ mod tests {
         assert!(table.contains("| 104 |"), "RANK 目前排名应整数: {}", table);
         // 无 N/A
         assert!(!table.contains("N/A"), "不应有 N/A: {}", table);
+        // 分隔行（第二行）`|` 数必须等于表头；修复前多一个尾随 `|` 形如 `|---|---|---|---|---|---||`。
+        let lines: Vec<&str> = table.lines().collect();
+        let pipes = |s: &str| s.chars().filter(|&c| c == '|').count();
+        assert!(
+            !lines[1].ends_with("||"),
+            "分隔行不应以 || 结尾: {}",
+            lines[1]
+        );
+        assert_eq!(pipes(lines[0]), pipes(lines[1]), "分隔行管道符数应等于表头");
     }
 
     // A股情绪走东方财富，国内网络即可达。
