@@ -180,7 +180,6 @@ async fn main() -> anyhow::Result<()> {
                             tail,
                             indicators: use_indicators,
                             stats: use_stats,
-                            raw: false,
                         };
                         let report = format::build_compact_report(
                             &symbol,
