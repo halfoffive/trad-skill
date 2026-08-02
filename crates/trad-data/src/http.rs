@@ -20,7 +20,7 @@ pub fn build_client() -> Result<Client> {
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
         .connect_timeout(Duration::from_secs(10))
         .cookie_store(true)
-        .user_agent("trad-skill/1.8.5")
+        .user_agent("trad-skill/1.8.6")
         .build()?;
     Ok(client)
 }

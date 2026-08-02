@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.6] - 2026-08-02
+
+### Fixed
+
+- **东方财富/A股 markdown 表格分隔行多一个尾随 `|`**：`build_cn_financial_table`、`build_us_timeseries_table`（fundamentals.rs）与 `format_cn_comment_table`（sentiment.rs）用 `format!("|{}|", "---|".repeat(N))` 生成分隔行，但 `"---|".repeat(N)` 末尾已带 `|`，外层再补一个 `|` 即产生形如 `|---|---|---|---|---|---||` 的尾随 `||`，使分隔行列数比表头/数据行多一列，渲染为多出一空列的错位表格（影响所有 `fundamentals`/`sentiment` 返回的表格）。改为 `format!("|{}", "---|".repeat(N))`（仅前导 `|`），三处分隔行管道符数与表头一致。新增「分隔行管道符数 == 表头」断言防回归。
+- **A股/港股 `news` 的 `--days` 被忽略**：`fetch_eastmoney_news` 接受 `days` 但仅在 Google News 降级分支使用，东方财富主路径 `sort=default` 且无日期过滤，`--days 7` 常返回数周前旧闻（实测 `0700.HK` 返回 7 月 2-9 日回购公告，而当日最近 7 天应为 7 月 26 日-8 月 2 日）。现 `sort=time` 按发布时间倒序拉取，新增 `parse_eastmoney_article_date` 解析文章 `date` 字段（如 `2026-07-30 21:25:00`）并按 `days` 客户端过滤，候选池 `pageSize=max(limit,30)` 过滤后取 `limit`；全部被日期过滤或无结果时仍降级 Google News（其自身按 `when:days` 过滤）。新增 5 个单元测试覆盖日期解析/过滤/limit/空数组。
+
+### Changed
+
+- 东方财富新闻表头改为「最近 N 天，共 M 条」（与 Yahoo/Google 新闻一致，体现 days 过滤已生效）。
+- HTTP user-agent 更新为 `trad-skill/1.8.6`。
+
+### Notes
+
+- `package.json` `version`: `1.8.5` -> `1.8.6`（+ 5 个 `optionalDependencies` `@trad-skill/*` pin）。
+- `crates/trad-data/Cargo.toml` `version`: `1.8.5` -> `1.8.6`。
+- 5 个 `npm/<platform>/package.json` `version`: `1.8.5` -> `1.8.6`。
+
 ## [1.8.5] - 2026-08-01
 
 ### Fixed
