@@ -53,11 +53,11 @@ const forwardedArgs = isDataInvocation
   ? userArgs
   : [
       // 显式 `install` 可能出现在任意位置（如 `--agent claude install`）：
-      // 抽取出来放最前，避免产生重复子命令 token。
+      // 仅当第一个位置参数是 `install` 时才剥离，避免误删 --dir install 等合法值。
       'install',
       '--skills-dir',
       skillsDir,
-      ...userArgs.filter((a) => a !== 'install'),
+      ...userArgs.filter((a, i) => !(i === 0 && a === 'install')),
     ];
 
 try {
