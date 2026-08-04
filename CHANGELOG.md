@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.3] - 2026-08-04
+
+### Fixed
+
+- **响应体大小限制全覆盖**：1.9.2 引入的 50 MB `text_limited()` 限制此前未覆盖全部读取点；本次补齐所有剩余无界读取：sentiment（StockTwits/Reddit/东方财富四处）与 fundamentals（东方财富两处）改走新增的 `json_limited()`（大小限制 + JSON 解析）；Yahoo crumb、Yahoo 直连探测、重试层错误体、东方财富新闻 JSONP 改走 `text_limited()`。新增 `check_content_length` Content-Length 预检（超限立即拒绝，避免下载）并附单元测试。
+
+### Changed
+
+- **发布流程**：`workflow_dispatch` 手动发布时 check/build/release 三个 job 改为统一检出解析后的 tag（此前仅 npm-publish 检出 tag，tag 不在默认分支顶端时二进制与清单可能漂移）；npm 发布前新增校验 `package.json` 的 5 个 `@trad-skill/*` optionalDependencies pin 与 tag 一致且数量恰为 5；`fail_on_unmatched_files` 改为 true，并在创建 GitHub Release 前断言 7 个平台二进制全部存在。
+- **指标快照输出头**：「技术指标快照（脚本预计算）」→「技术指标快照（预计算）」（去除 Python 时代措辞；测试断言同步锁定新标题）。
+- **文档同步**：README/README_CN 修正 A股/港股陈旧的「AKShare → yfinance」数据源描述（实际默认东方财富、可 `--source yahoo` 切换）、补齐 4/5 位纯数字港股代码的市场识别规则、修正二进制分发描述（五个 `@trad-skill/*` 平台包 + 启动器解析）并中英对齐（摘要表、A股/港股说明、TDX 行）；AGENTS.md 结构树补齐 npm/、CONTRIBUTING.md、CLAUDE.md、release.yml，修正 launcher 描述与 clippy 命令；CONTRIBUTING.md 与 install.rs 注释去除 strategy-1 残留；SKILL.md 市场列表补 A股、补港股情绪不支持说明与 `stock` 默认日期窗（end=今天、start=今天−365 天），data-sources.md 去除 "script" 残留措辞。
+
+### Notes
+
+- `package.json` `version`: `1.9.2` -> `1.9.3`（+ 5 个 `optionalDependencies` `@trad-skill/*` pin）。
+- `crates/trad-data/Cargo.toml` `version`: `1.9.2` -> `1.9.3`。
+- 5 个 `npm/<platform>/package.json` `version`: `1.9.2` -> `1.9.3`。
+- `crates/trad-data/Cargo.lock` 重新同步至 `1.9.3`（该文件自 v1.9.2 起停留在 `1.9.1`）。
+
 ## [1.9.2] - 2026-08-02
 
 ### Fixed
