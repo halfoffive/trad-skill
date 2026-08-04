@@ -131,6 +131,20 @@ The agent will orchestrate the full pipeline and produce a structured investment
 | Confidence | medium |
 | Market | US |
 
+### China A-share notes
+
+- Tickers use the 6-digit pure-number format (e.g., 600519, 000858)
+- `trad-skill` auto-detects the exchange from the 6-digit code prefix (leading 6 → Shanghai .SS; leading 0/3 → Shenzhen .SZ), so you only need to provide the 6-digit number
+- Data source: Eastmoney price APIs by default; use `trad-skill stock --source yahoo` to switch to the Yahoo channel (A-share codes are auto-mapped to .SS/.SZ)
+- Chinese news and sentiment analysis are supported
+- China-market-specific analyst prompts are used (`china_market_analyst.md`, `cn_news_analyst.md`)
+
+### HK stock notes
+
+- Use a 4-5 digit number + `.HK` suffix (e.g., 0700.HK or 00700.HK; `trad-skill` accepts both and zero-pads the code to 5 digits internally)
+- Data source: HK prices default to the Eastmoney APIs (secid 116.<5-digit code>); `--source yahoo` switches to the Yahoo channel
+- Stock Connect targets and HK main-board stocks are supported
+
 ### Configuration
 
 | Parameter | Range | Default | Description |
@@ -140,7 +154,13 @@ The agent will orchestrate the full pipeline and produce a structured investment
 | `output_language` | English / Chinese | match user | Language for all reports |
 | `market` | auto-detect | — | Detected from ticker suffix |
 
-Market auto-detection: 6-digit pure number (e.g., 600519, 000858) → A-shares, `.HK` means HK stocks, `-USD` means Crypto, everything else defaults to US stocks.
+Market auto-detection:
+
+- 6-digit pure number (e.g., 600519, 000858) → A-shares
+- 4/5-digit pure number (e.g., 0700, 09988) → HK stocks (when no `.HK` suffix)
+- `.HK` suffix → HK stocks
+- `-USD` suffix → Crypto
+- Everything else → US stocks
 
 ---
 
@@ -236,6 +256,7 @@ trad-skill/                        # repo root (meta files + installer)
 | Tushare | A-shares | Price, fundamentals | Token |
 | AKShare | A-shares/HK | Price, news, sentiment | Free |
 | Baostock | A-shares | Historical data | Free |
+| TDX (通达信) | A-shares | Technical indicators | Free |
 
 See [references/data-sources.md](skills/tradingagents-analysis/references/data-sources.md) for the full catalog with fallback strategies.
 
@@ -243,7 +264,7 @@ See [references/data-sources.md](skills/tradingagents-analysis/references/data-s
 
 ## Data Tool (`trad-skill`)
 
-Data is fetched by the `trad-skill` Rust binary, which provides market data (OHLCV + indicators), news, fundamentals, and sentiment in a single compact output suitable for LLM prompt injection. The binary is distributed via `bin/` and invoked through `bin/trad-skill.js` for cross-platform compatibility. The same binary handles both install and data subcommands.
+Data is fetched by the `trad-skill` Rust binary, which provides market data (OHLCV + indicators), news, fundamentals, and sentiment in a single compact output suitable for LLM prompt injection. Platform binaries are distributed as the five `@trad-skill/<platform>` npm packages (installed as optional dependencies), and the thin launcher `bin/trad-skill.js` resolves the correct one at runtime. The same binary handles both install and data subcommands.
 
 > The agent must run `trad-skill` by its **absolute path** inside the installed skill directory (e.g. `~/.agents/skills/tradingagents-analysis/bin/<platform>/trad-skill`), because a sub-agent's working directory is the user's project, not the skill folder. The skill's `SKILL.md` instructs the main agent to resolve that path before spawning analysts.
 
