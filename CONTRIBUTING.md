@@ -35,7 +35,7 @@ From `crates/trad-data/`:
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
 
@@ -67,7 +67,7 @@ bunx trad-skill@latest stock --symbol AAPL
 - [ ] English (`README.md`) and Chinese (`README_CN.md`) docs are kept in parity.
 - [ ] `SKILL.md §2` (the "ask for the ticker first" prerequisite) is preserved.
 - [ ] **Do not edit `CLAUDE.md`** — it is a pointer to `AGENTS.md`. Edit `AGENTS.md` instead.
-- [ ] If you touched the installer, verify `node_platform_key()` (install.rs) still matches `bin/trad-skill.js` strategy-1 path, and `--dry-run` works.
+- [ ] If you touched the installer, verify `node_platform_key()` (install.rs) still matches the launcher's `@trad-skill/<key>` package resolution and the 5 npm package names, and `--dry-run` works.
 - [ ] If you changed the default install target or flags, update README, README_CN, SKILL.md §1, and AGENTS.md together.
 
 ## Release procedure
