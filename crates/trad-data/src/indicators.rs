@@ -341,7 +341,7 @@ pub fn compute_indicators(data: &[OhlcvRow]) -> String {
 
     // 组装紧凑指标快照表
     let lines: Vec<String> = vec![
-        "## 技术指标快照（脚本预计算）\n".to_string(),
+        "## 技术指标快照（预计算）\n".to_string(),
         "| 指标 | 最新值 | 信号 |".to_string(),
         "|---|---|---|".to_string(),
         format!("| 收盘价 | {} | — |", fmt_val(px)),
@@ -581,7 +581,7 @@ mod tests {
             })
             .collect();
         let result = compute_indicators(&data);
-        assert!(result.contains("技术指标快照"));
+        assert!(result.contains("技术指标快照（预计算）"));
         assert!(result.contains("SMA50"));
         assert!(result.contains("RSI(14)"));
     }

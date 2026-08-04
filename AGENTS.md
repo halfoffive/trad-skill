@@ -4,7 +4,7 @@
 
 An AI agent **skill** (not an application). It teaches an AI agent to run the TradingAgents multi-agent stock analysis pipeline. Installable via `bunx trad-skill` (default target: `~/.agents/skills`); `npx trad-skill` works as a fallback.
 
-The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ + bin/). Rust source lives in `crates/trad-data/` — the compiled binary is named `trad-skill` and serves as both the **data tool** and the **installer** (default action when invoked with no subcommand) — with CI (cargo fmt/clippy/test + 7-platform cross-build) in `.github/workflows/ci.yml`.
+The core deliverable is `skills/tradingagents-analysis/` (SKILL.md + references/ in the repo; the installer adds bin/<platform>/ at install time). Rust source lives in `crates/trad-data/` — the compiled binary is named `trad-skill` and serves as both the **data tool** and the **installer** (default action when invoked with no subcommand) — with CI (cargo fmt/clippy/test + 7-platform cross-build) in `.github/workflows/ci.yml`.
 
 ## Structure
 
@@ -15,9 +15,13 @@ trad-skill/                        # repo root (meta files + installer)
 ├── README.md / README_CN.md       # bilingual docs with language switch
 ├── CHANGELOG.md                   # version history
 ├── AGENTS.md                      # this file
+├── CONTRIBUTING.md                # branch/commit/release conventions
+├── CLAUDE.md                      # pointer to AGENTS.md (do not edit)
 ├── LICENSE                        # Apache 2.0
 ├── .github/workflows/ci.yml      # CI: fmt + clippy + test + 7-platform build
+├── .github/workflows/release.yml  # tag-triggered release: 7-platform build + npm publish
 ├── crates/trad-data/              # Rust source (binary name: trad-skill)
+├── npm/                           # 5 platform package dirs (@trad-skill/*)
 └── skills/
     └── tradingagents-analysis/    # the installable skill
         ├── SKILL.md               # skill entry point (YAML frontmatter)
@@ -43,7 +47,7 @@ Deprecated: the third-party `npx skills add halfoffive/trad-skill ...` flow (ver
 
 ## Installer (`package.json` + `bin/trad-skill.js` + Rust binary)
 
-The installer logic is **Rust**, in `crates/trad-data/src/install.rs`. The compiled binary is named `trad-skill`; invoking it with no subcommand defaults to the install flow, and an explicit `install` subcommand is also accepted. The npm `trad-skill` bin entry is a zero-logic CJS launcher (`bin/trad-skill.js`) that resolves the platform binary and execs it. Data subcommands (`stock`/`news`/`fundamentals`/`sentiment`) are passed through verbatim; for install mode (implicit or explicit `install`), the launcher injects `--skills-dir <pkgRoot>/skills/tradingagents-analysis` — the Rust binary's built-in default is a build-machine path and must never be used on user machines. A user-supplied `--skills-dir` wins over the injected one (clap self-override).
+The installer logic is **Rust**, in `crates/trad-data/src/install.rs`. The compiled binary is named `trad-skill`; invoking it with no subcommand defaults to the install flow, and an explicit `install` subcommand is also accepted. The npm `trad-skill` bin entry is a thin CJS launcher (`bin/trad-skill.js`) that resolves the platform binary and execs it. Data subcommands (`stock`/`news`/`fundamentals`/`sentiment`) are passed through verbatim; for install mode (implicit or explicit `install`), the launcher injects `--skills-dir <pkgRoot>/skills/tradingagents-analysis` — the Rust binary's built-in default is a build-machine path and must never be used on user machines. A user-supplied `--skills-dir` wins over the injected one (clap self-override).
 
 - Copies `skills/tradingagents-analysis/` into the target agent's skills dir. **Default target: `~/.agents/skills`** (generic agent directory). Flags: `--dir <path>`, `--agent claude|agents|opencode` (mutually exclusive).
 - Copies the platform binary into `bin/<node-platform-key>/` via **self-copy** (`std::env::current_exe()`). `--bin-path` / `--no-bin` override. If the binary fails to copy and `--no-bin` was not given, the install exits non-zero.
@@ -62,7 +66,7 @@ Prompts and methodology are distilled from these. When updating prompts, re-extr
 ## Coding Standards
 
 ### Rust
-- All code must pass `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test` before committing.
+- All code must pass `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test` before committing.
 - Use `anyhow` for error handling. No `unwrap()`/`expect()` in non-test code.
 - All HTTP clients must use `rustls-tls`. Never introduce `native-tls` or `openssl` (breaks cross-compilation).
 - No `cfg(target_os)` platform-specific code unless covering all 7 build targets.
@@ -77,7 +81,7 @@ New dependencies must support all 7 CI targets:
 ### Build targets (7)
 x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-unknown-linux-musl, aarch64-unknown-linux-musl, aarch64-apple-darwin, x86_64-pc-windows-msvc, aarch64-pc-windows-msvc.
 
-When adding/removing targets, update: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `bin/trad-skill.js`.
+When adding/removing targets, update: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `bin/trad-skill.js`, `package.json` optionalDependencies, and `npm/<platform>/package.json`.
 
 ### Release
 - Version lives in **7 files that must stay in sync** (a desync silently breaks platform package install):
@@ -92,7 +96,7 @@ Follow this flow for any code or docs change (see [CONTRIBUTING.md](CONTRIBUTING
 1. **Branch first.** Never commit directly to `main`. Cut a branch off `main` (`feat/<slug>`, `fix/<slug>`, `docs/<slug>`, etc.) and do all work there.
 2. **Commit in batches.** Split the work into several small, logical Conventional Commits (e.g. `fix(rust): ...`, `feat(rust): ...`, `docs: ...`, `chore(release): ...`) rather than one giant commit.
 3. **Keep docs in sync.** In the same change, update `AGENTS.md`, `README.md` / `README_CN.md` (kept in parity), and `CHANGELOG.md` whenever behavior, flags, or conventions change. A code change without its doc update is incomplete.
-4. **Gate before push.** Run `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test` (from `crates/trad-data/`) and confirm they pass before pushing.
+4. **Gate before push.** Run `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test` (from `crates/trad-data/`) and confirm they pass before pushing.
 5. **Push last.** Only push the branch after the local gates pass (`git push -u origin <branch>`).
 6. **Open a PR for review.** Open a Pull Request against `main` and **request the user's review** before merging. Do not self-merge. Squash-merge per CONTRIBUTING.md.
 

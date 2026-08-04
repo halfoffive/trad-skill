@@ -118,20 +118,28 @@ rm -rf /tmp/trad-skill
 - "交易分析：特斯拉 TSLA"
 - "投资研究：比亚迪 002594"
 
-代理将编排完整的分析流水线，生成结构化的投资研究报告。
+代理将编排完整的分析流水线，生成结构化的投资研究报告，报告末尾附一张汇总表：
+
+| 字段 | 值 |
+|---|---|
+| 代码 | AAPL |
+| 日期 | 2025-01-15 |
+| 评级 | Overweight |
+| 置信度 | medium |
+| 市场 | US |
 
 ### A股特别说明
 
 - 股票代码使用6位纯数字格式（如 600519、000858）
 - `trad-skill` 内部根据 6 位代码前缀自动判断交易所（6 开头 → 上海 .SS；0/3 开头 → 深圳 .SZ），用户只需提供 6 位纯数字
-- 数据源优先级：AKShare → yfinance
+- 数据源：默认走东方财富（Eastmoney）行情接口；可用 `trad-skill stock --source yahoo` 切换 Yahoo 通道（A股代码自动映射为 .SS/.SZ）
 - 支持中文新闻和情绪分析
 - 使用中国市场专用分析师提示词（`china_market_analyst.md`、`cn_news_analyst.md`）
 
 ### 港股特别说明
 
-- 使用 4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；`trad-skill` 的 `zfill(5)` 两种都接受）
-- 数据源：AKShare → yfinance
+- 使用 4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；`trad-skill` 两种都接受，内部统一做 5 位零填充）
+- 数据源：港股行情默认走东方财富接口（secid 116.<5位代码>）；`--source yahoo` 可切换 Yahoo 通道
 - 支持港股通标的和港股主板股票
 
 ---
@@ -182,6 +190,14 @@ rm -rf /tmp/trad-skill
 | `max_risk_discuss_rounds` | 1–3 | 1 | 风控辩论中三方交锋轮数 |
 | `output_language` | English / 中文 | 跟随用户语言 | 所有报告和最终决策的输出语言 |
 | `market` | 自动检测 | — | 根据代码后缀自动识别市场 |
+
+市场自动识别规则：
+
+- 6 位纯数字（如 600519、000858）→ A股
+- 4/5 位纯数字（如 0700、09988）→ 港股（无 `.HK` 后缀时）
+- `.HK` 后缀 → 港股
+- `-USD` 后缀 → 加密货币
+- 其余 → 美股
 
 ---
 
@@ -251,7 +267,7 @@ trad-skill/                        # 仓库根目录（元文件 + 安装器）
 
 ## 数据工具（`trad-skill`）
 
-数据通过 `trad-skill` Rust 二进制获取，提供行情数据（OHLCV + 指标）、新闻、基本面和情绪数据，输出为紧凑格式，适合 LLM 提示词注入。二进制通过 `bin/` 分发，并通过 `bin/trad-skill.js` 实现跨平台兼容；同一个二进制同时承载安装和数据子命令。
+数据通过 `trad-skill` Rust 二进制获取，提供行情数据（OHLCV + 指标）、新闻、基本面和情绪数据，输出为紧凑格式，适合 LLM 提示词注入。平台二进制以五个 `@trad-skill/<platform>` npm 包的形式分发（作为 optional dependencies 安装），极简 launcher `bin/trad-skill.js` 在运行时解析出当前平台对应的二进制；同一个二进制同时承载安装和数据子命令。
 
 > 代理必须用技能安装目录内的**绝对路径**来运行 `trad-skill`（如 `~/.agents/skills/tradingagents-analysis/bin/<platform>/trad-skill`），因为子代理的工作目录是用户项目，而非技能文件夹。`SKILL.md` 已指示主代理在派生子代理前先解析该路径。
 

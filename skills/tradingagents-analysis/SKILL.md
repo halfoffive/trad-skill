@@ -21,7 +21,7 @@ After installation, the skill will be available at one of these locations (check
 - `~/.config/opencode/skills/tradingagents-analysis` (OpenCode global)
 
 Data tool (Rust binary):
-  The same `trad-skill` binary powers both the installer and data fetching. It provides stock, fundamentals, news, and sentiment data for US/HK/Crypto markets. If the bundled binary is missing, run any subcommand directly via `bunx trad-skill@latest <subcommand>` (e.g. `bunx trad-skill@latest stock --symbol AAPL`).
+  The same `trad-skill` binary powers both the installer and data fetching. It provides stock, fundamentals, news, and sentiment data for US stocks, China A-shares, HK stocks, and Crypto. Sentiment coverage: StockTwits/Reddit for US/Crypto, Eastmoney 千股千评/机构参与度 for A-shares; HK sentiment is not supported. If the bundled binary is missing, run any subcommand directly via `bunx trad-skill@latest <subcommand>` (e.g. `bunx trad-skill@latest stock --symbol AAPL`).
 
 Verify installation by checking that `SKILL.md` and `references/` exist in the skill directory.
 
@@ -160,7 +160,7 @@ Substitute the correct subcommand **and** args per analyst (see Section 6). **`t
 
 > **Template variables in verbatim prompts.** The role prompts in `references/prompts/` contain LangChain-style variables (`{ticker}`, `{current_date}`, `{instrument_context}`, `{get_language_instruction()}`, `{tool_names}`, `{NO_EXTERNAL_TOOLS}`, and ~24 others — 30 in total). **Substitute them before spawning** per the table in `references/prompts/README.md` (§ "Template Variable Substitution"). Quick reference: `{ticker}` → ticker; `{target_label}` → `stock` (equities) or `asset` (crypto); `{asset_label}` → `company` (equities) or `asset` (crypto); `{fundamentals_label}` → `Company fundamentals report` (equities) or `Asset fundamentals report (may be unavailable for crypto)` (crypto); `{current_date}` → today; `{start_date}`/`{end_date}` → analysis window; `{instrument_context}` → `Market: <US/A股/港股/Crypto>; Ticker: <symbol>; Trade date: <date>`; `{get_language_instruction()}` → empty string (English) or ` Write your entire response in <lang>.` (non-English); `{tool_names}`/`{system_message}`/`{lessons_line}` → empty string; `{NO_EXTERNAL_TOOLS}` → empty (not set — fallback permitted); data-report variables (`{market_research_report}` etc.) → bound to stage outputs per "Re-injection discipline" below.
 
-> **Token discipline.** Each analyst report must be **concise (target ≤ 400 words)** and structured as: a `## Key Signals` block of 5–8 actionable bullets at the top, a short evidence section referencing the script's key numbers (not reproducing the raw output), and one summary table. The `## Key Signals` block is what downstream stages consume — keep it self-contained. This overrides any "very detailed" phrasing in the verbatim role prompt: be evidence-dense, not verbose.
+> **Token discipline.** Each analyst report must be **concise (target ≤ 400 words)** and structured as: a `## Key Signals` block of 5–8 actionable bullets at the top, a short evidence section referencing the binary's key numbers (not reproducing the raw output), and one summary table. The `## Key Signals` block is what downstream stages consume — keep it self-contained. This overrides any "very detailed" phrasing in the verbatim role prompt: be evidence-dense, not verbose.
 
 Wait for all four analysts to complete before proceeding.
 
@@ -233,7 +233,7 @@ The `trad-skill` Rust binary lives in this skill's `bin/<platform>/` directory. 
 
 | Command | Purpose | Invocation |
 |---|---|---|
-| `trad-skill stock` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). | `trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
+| `trad-skill stock` | OHLCV **tail** (default 30 rows) + **pre-computed indicators** (SMA/EMA/MACD/RSI/Bollinger/ATR/VWMA/MFI) + optional stats. The Market Analyst **interprets** these pre-computed values (no manual arithmetic). (defaults when omitted: `--end` = today, `--start` = today − 365 days) | `trad-skill stock --symbol AAPL --start 2023-07-01 --end 2024-06-30 --tail 30 --stats` |
 | `trad-skill news` | Company news (US: Yahoo Finance + Google News RSS). Default `--limit 8` per source; all summaries truncated. | `trad-skill news --symbol AAPL --days 7 --limit 8` |
 | `trad-skill fundamentals` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `trad-skill fundamentals --symbol AAPL` |
 | `trad-skill sentiment` | Social sentiment from StockTwits, Reddit. Default `--limit 15`, `--days 7` (Reddit window); message/post displays trimmed. | `trad-skill sentiment --symbol AAPL --limit 15 --days 7` |
@@ -245,6 +245,8 @@ The `trad-skill` Rust binary lives in this skill's `bin/<platform>/` directory. 
 > **A股优先东方财富；Yahoo 不可达时的回退**: A股的 `stock` / `fundamentals` / `news` 全部自动走东方财富（不依赖 Yahoo），直接用 6 位代码即可——A股分析应首选东方财富源。当 Yahoo Finance 不可达（症状：`未知错误` / `401 Unauthorized` / `403 Forbidden`，常见于数据中心/云 IP）时：美股行情改用 `stock --source eastmoney`；美股 `fundamentals` / `news` 没有东方财富对应源，**仅对这两部分**回退到网络搜索/浏览器工具，其余子命令仍走 `trad-skill`。
 >
 > **港股 fundamentals 自动走东方财富**: 港股（`0700.HK`、`09988` 等）的 `fundamentals` 子命令自动路由到东方财富（secid `116.{code}`），无需 `--source` 参数，与 A股行为一致。Yahoo Finance 不可达时港股基本面不受影响；若东方财富 datacenter 无对应财务指标行，基本面报告仍会输出个股基本信息，财务指标表优雅降级为「暂不可用」。
+>
+> **HK sentiment is not supported** (StockTwits/Reddit are US-only; Eastmoney 千股千评 does not cover HK) — use the US-listed ticker if available (e.g. 9988.HK -> BABA).
 
 For the full catalog of data sources, APIs, and fallback strategies, see `references/data-sources.md`.
 

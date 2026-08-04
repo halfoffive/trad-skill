@@ -437,7 +437,7 @@ async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> S
 
     let mut has_info = false;
     if let Ok(resp) = get_with_retry(client, &info_url, Some(2)).await {
-        if let Ok(body) = resp.json::<Value>().await {
+        if let Ok(body) = crate::http::json_limited(resp).await {
             if let Some(data) = body.get("data") {
                 sections.push("## 个股基本信息\n".to_string());
                 let field_map = [
@@ -474,7 +474,7 @@ async fn fetch_eastmoney_fundamentals(client: &Client, p: &EastmoneyParams) -> S
     let mut has_finance = false;
     match get_with_retry(client, &fin_url, Some(2)).await {
         Ok(resp) => {
-            if let Ok(body) = resp.json::<Value>().await {
+            if let Ok(body) = crate::http::json_limited(resp).await {
                 let data_arr = body
                     .get("result")
                     .and_then(|r| r.get("data"))

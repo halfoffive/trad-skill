@@ -31,7 +31,7 @@ async fn fetch_stocktwits(client: &Client, symbol: &str, limit: u32) -> String {
         Err(_) => return "<unavailable>".to_string(),
     };
 
-    let data: Value = match resp.json().await {
+    let data: Value = match crate::http::json_limited(resp).await {
         Ok(v) => v,
         Err(_) => return "<unavailable>".to_string(),
     };
@@ -137,7 +137,7 @@ async fn fetch_subreddit(
         _ => return Vec::new(),
     };
 
-    let data: Value = match resp.json().await {
+    let data: Value = match crate::http::json_limited(resp).await {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
@@ -246,7 +246,7 @@ async fn fetch_cn_sentiment(client: &Client, symbol: &str) -> String {
 
     match get_with_retry(client, &comment_url, Some(2)).await {
         Ok(resp) => {
-            if let Ok(body) = resp.json::<Value>().await {
+            if let Ok(body) = crate::http::json_limited(resp).await {
                 let data_arr = body
                     .get("result")
                     .and_then(|r| r.get("data"))
@@ -280,7 +280,7 @@ async fn fetch_cn_sentiment(client: &Client, symbol: &str) -> String {
 
     match get_with_retry(client, &eval_url, Some(2)).await {
         Ok(resp) => {
-            if let Ok(body) = resp.json::<Value>().await {
+            if let Ok(body) = crate::http::json_limited(resp).await {
                 let data_arr = body
                     .get("result")
                     .and_then(|r| r.get("data"))

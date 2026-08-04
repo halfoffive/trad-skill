@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -79,6 +81,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -133,6 +137,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Resolve tag
         id: tag
@@ -230,6 +236,29 @@ jobs:
           cat SHA256SUMS.txt >> full_notes.md
           echo '```' >> full_notes.md
 
+      - name: Verify all platform artifacts present
+        shell: bash
+        run: |
+          missing=()
+          for f in \
+            trad-skill-x86_64-unknown-linux-gnu \
+            trad-skill-aarch64-unknown-linux-gnu \
+            trad-skill-aarch64-apple-darwin \
+            trad-skill-x86_64-unknown-linux-musl \
+            trad-skill-aarch64-unknown-linux-musl \
+            trad-skill-x86_64-pc-windows-msvc.exe \
+            trad-skill-aarch64-pc-windows-msvc.exe; do
+            if [ ! -f "artifacts/$f" ]; then
+              missing+=("$f")
+            fi
+          done
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Missing platform artifacts (${#missing[@]}/7):"
+            printf '  - %s\n' "${missing[@]}"
+            exit 1
+          fi
+          echo "✓ all 7 platform artifacts present under artifacts/"
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
@@ -238,7 +267,7 @@ jobs:
           files: |
             artifacts/*
             SHA256SUMS.txt
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
 
   npm-publish:
     name: Publish to npm
@@ -293,7 +322,20 @@ jobs:
               console.error(`Cargo.toml 版本不一致: ${m ? m[1] : "未找到"}，tag = ${version}`);
               process.exit(1);
             }
-            console.log(`✓ ${files.length} 个 npm manifest + Cargo.toml 与 tag v${version} 一致`);
+            const mainPkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const pins = Object.entries(mainPkg.optionalDependencies || {}).filter(([k]) => k.startsWith("@trad-skill/"));
+            if (pins.length !== 5) {
+              console.error(`optionalDependencies @trad-skill/* 数量异常: ${pins.length} 个，期望 5 个，tag = ${version}`);
+              process.exit(1);
+            }
+            const badPins = pins.filter(([, v]) => v !== version);
+            if (badPins.length > 0) {
+              for (const [k, v] of badPins) {
+                console.error(`optionalDependencies 版本不一致: ${k} = ${v}，tag = ${version}`);
+              }
+              process.exit(1);
+            }
+            console.log(`✓ ${files.length} 个 npm manifest + Cargo.toml + ${pins.length} 个 optionalDependencies pin 与 tag v${version} 一致`);
           ' "$VERSION"
 
       - name: Remove deprecated always-auth from .npmrc
