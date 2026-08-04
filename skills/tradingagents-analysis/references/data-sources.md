@@ -9,27 +9,27 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **API Key**: Not required (free)
 - **Markets**: US, HK, global exchanges
 - **Used by**: Market Analyst, Fundamentals Analyst, News Analyst
-- **Fallback**: Alpha Vantage (not wired in scripts; agent uses web search fallback)
+- **Fallback**: Alpha Vantage (not wired into the `trad-skill` binary; agent uses web search fallback)
 
 ### Alpha Vantage
 - **Provides**: Stock data, technical indicators, fundamental data, news
 - **API Key**: Required (ALPHA_VANTAGE_API_KEY, free tier available)
 - **Markets**: US primarily
-- **Used by**: Market Analyst, Fundamentals Analyst, News Analyst (not wired in scripts; agent uses web search fallback)
+- **Used by**: Market Analyst, Fundamentals Analyst, News Analyst (not wired into the `trad-skill` binary; agent uses web search fallback)
 - **Fallback**: yfinance
 
 ### FRED (Federal Reserve Economic Data)
 - **Provides**: Macroeconomic indicators (CPI, Core PCE, unemployment, fed funds rate, 10Y treasury, yield curve)
 - **API Key**: Required (FRED_API_KEY, free)
 - **Markets**: US macro
-- **Used by**: News Analyst (macro context) (not wired in scripts; agent uses web search fallback)
+- **Used by**: News Analyst (macro context) (not wired into the `trad-skill` binary; agent uses web search fallback)
 - **Indicators available**: cpi, core_pce, unemployment, fed_funds_rate, 10y_treasury, yield_curve
 
 ### Polymarket
 - **Provides**: Prediction market probabilities for forward-looking events
 - **API Key**: Not required (keyless)
 - **Markets**: Global events
-- **Used by**: News Analyst (not wired in scripts; agent uses web search fallback)
+- **Used by**: News Analyst (not wired into the `trad-skill` binary; agent uses web search fallback)
 - **Example queries**: "Fed rate cut", "recession 2026", geopolitical events
 
 ### StockTwits
@@ -52,7 +52,7 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **Provides**: A股 daily/weekly/monthly data, financial statements, fundamentals
 - **API Key**: Required (TUSHARE_TOKEN)
 - **Markets**: China A-shares (Shanghai .SS, Shenzhen .SZ)
-- **Used by**: China Market Analyst, Fundamentals Analyst (not wired in scripts; agent uses web search fallback)
+- **Used by**: China Market Analyst, Fundamentals Analyst (not wired into the `trad-skill` binary; agent uses web search fallback)
 - **Priority**: Primary for A-shares
 
 ### AKShare
@@ -65,14 +65,14 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **Provides**: A股 historical K-line data, financial reports
 - **API Key**: Not required (free)
 - **Markets**: China A-shares
-- **Used by**: China Market Analyst (fallback) (not wired in scripts; agent uses web search fallback)
+- **Used by**: China Market Analyst (fallback) (not wired into the `trad-skill` binary; agent uses web search fallback)
 - **Priority**: Tertiary fallback
 
 ### TDX / 通达信
 - **Provides**: Technical indicators, real-time quotes
 - **API Key**: Not required (local data)
 - **Markets**: China A-shares
-- **Used by**: China Market Analyst (technical analysis) (not wired in scripts; agent uses web search fallback)
+- **Used by**: China Market Analyst (technical analysis) (not wired into the `trad-skill` binary; agent uses web search fallback)
 
 ### Google News (Chinese)
 - **Provides**: Chinese financial news articles
@@ -138,7 +138,7 @@ Data fetching is implemented in Rust (`trad-skill` binary) for all markets inclu
 - Crypto: Yahoo Finance API (same as US stocks)
 - Fundamentals: Yahoo Finance quoteSummary v10 (browser UA + cookie/crumb handshake) for US/Crypto; **Eastmoney** push2 + datacenter for A-shares **and HK stocks** (secid `116.{code}`; financial-indicator table gracefully degrades to "暂不可用" if Eastmoney has no HK rows)
 - News: Yahoo Finance quoteSummary v10 (browser UA + cookie/crumb handshake) + Google News RSS in parallel (US); Eastmoney/Google News (CN)
-- Sentiment: StockTwits + Reddit JSON API
+- Sentiment: StockTwits + Reddit JSON API (US/Crypto); Eastmoney 千股千评/机构参与度 (A-shares); HK not supported
 - China A-shares: Eastmoney APIs (via Rust HTTP) — stock, fundamentals, and news all auto-route here, no Yahoo dependency
 
 ### Data channel selection (`stock --source`)
