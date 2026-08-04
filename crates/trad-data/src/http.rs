@@ -83,8 +83,9 @@ pub async fn get_with_retry_headers(
                 } else {
                     None
                 };
-                // 读取并丢弃错误响应体，让连接归还连接池复用（直接 drop 会关闭连接）
-                let _ = resp.text().await;
+                // 读取并丢弃错误响应体（经 text_limited 的 50 MB 上限防护），
+                // 让连接归还连接池复用（直接 drop 会关闭连接）
+                let _ = text_limited(resp).await;
                 let err = anyhow::anyhow!("HTTP 请求失败: {}", status);
                 // 4xx（除 429）不可恢复，立即返回，不退避
                 if !is_retryable_status(status) {
@@ -133,13 +134,11 @@ pub fn url_encode(s: &str) -> String {
     result
 }
 
-/// 读取响应体文本，带大小上限防护（默认 50 MB）。
+/// Content-Length 预检：服务端提供 Content-Length 且超过上限时立即拒绝（避免下载）。
 ///
-/// 先检查 Content-Length（若服务端提供），超限立即拒绝避免下载；
-/// 无 Content-Length 时读取 bytes 后检查实际长度。
-/// 返回 `Result<String, String>`（与数据模块错误类型一致）。
-pub async fn text_limited(resp: reqwest::Response) -> Result<String, String> {
-    if let Some(len) = resp.content_length() {
+/// 无 Content-Length（None）时放行，由读取后的实际长度检查兜底。
+fn check_content_length(len: Option<u64>) -> Result<(), String> {
+    if let Some(len) = len {
         if len as usize > MAX_RESPONSE_BYTES {
             return Err(format!(
                 "响应体过大（{} 字节，上限 {}）",
@@ -147,6 +146,16 @@ pub async fn text_limited(resp: reqwest::Response) -> Result<String, String> {
             ));
         }
     }
+    Ok(())
+}
+
+/// 读取响应体文本，带大小上限防护（默认 50 MB）。
+///
+/// 先检查 Content-Length（若服务端提供），超限立即拒绝避免下载；
+/// 无 Content-Length 时读取 bytes 后检查实际长度。
+/// 返回 `Result<String, String>`（与数据模块错误类型一致）。
+pub async fn text_limited(resp: reqwest::Response) -> Result<String, String> {
+    check_content_length(resp.content_length())?;
     let bytes = resp
         .bytes()
         .await
@@ -161,6 +170,12 @@ pub async fn text_limited(resp: reqwest::Response) -> Result<String, String> {
     String::from_utf8(bytes.to_vec()).map_err(|e| format!("响应体非有效 UTF-8: {}", e))
 }
 
+/// 读取响应体并解析为 JSON，带大小上限防护（复用 `text_limited` 的 50 MB 上限）。
+pub async fn json_limited(resp: reqwest::Response) -> Result<serde_json::Value, String> {
+    let body = text_limited(resp).await?;
+    serde_json::from_str(&body).map_err(|e| format!("JSON 解析失败: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +188,23 @@ mod tests {
         assert_eq!(url_encode("a+b/c"), "a%2Bb%2Fc");
         // 非 ASCII（中文）按 UTF-8 字节编码
         assert_eq!(url_encode("腾讯"), "%E8%85%BE%E8%AE%AF");
+    }
+
+    #[test]
+    fn test_check_content_length_over_limit() {
+        let err = check_content_length(Some(MAX_RESPONSE_BYTES as u64 + 1)).unwrap_err();
+        assert!(err.contains("响应体过大"), "超限应报响应体过大: {}", err);
+    }
+
+    #[test]
+    fn test_check_content_length_within_limit() {
+        assert!(check_content_length(Some(1024)).is_ok());
+    }
+
+    #[test]
+    fn test_check_content_length_none() {
+        // 无 Content-Length 时放行，由读取后的实际长度检查兜底
+        assert!(check_content_length(None).is_ok());
     }
 
     #[test]

@@ -76,7 +76,7 @@ async fn get_crumb_fresh(client: &Client) -> Option<String> {
         if !resp.status().is_success() {
             return None;
         }
-        let crumb = resp.text().await.ok()?;
+        let crumb = crate::http::text_limited(resp).await.ok()?;
         let crumb = crumb.trim();
         // 校验：crumb 应为短 ASCII 字母数字串；封锁形态下拿到的是 HTML/超长垃圾，
         // 直接视为失败，避免把垃圾串拼进重试 URL 保证失败。
@@ -124,7 +124,7 @@ pub async fn yahoo_get_body(client: &Client, url: &str) -> Result<String, String
     if let Ok(resp) =
         get_with_retry_headers(client, url, &[("User-Agent", BROWSER_UA)], Some(2)).await
     {
-        if let Ok(body) = resp.text().await {
+        if let Ok(body) = crate::http::text_limited(resp).await {
             if !body_has_yahoo_error(&body) {
                 return Ok(body);
             }

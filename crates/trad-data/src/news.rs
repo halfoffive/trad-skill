@@ -459,7 +459,7 @@ async fn fetch_eastmoney_news(
 
     // 取数 + 解析任一步失败均降级到 Google News 中文（其自身按 when:days 过滤）。
     let em_items = match get_with_retry(client, &url, Some(2)).await {
-        Ok(resp) => match resp.text().await {
+        Ok(resp) => match crate::http::text_limited(resp).await {
             Ok(text) => {
                 let json_str = strip_jsonp(&text);
                 match serde_json::from_str::<Value>(&json_str) {
