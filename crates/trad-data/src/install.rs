@@ -143,8 +143,9 @@ fn resolve_parent_dir(dir: &Option<String>, agent: &Option<AgentTarget>) -> Resu
 
 /// 把 rustc 的 target 元素映射为 Node 的 process.platform/process.arch 命名。
 /// `std::env::consts` 在编译期按 target 固化，因此交叉编译产物在目标机上运行时返回正确值。
-/// 该键必须与 `bin/trad-skill.js` 的 strategy-1 查找路径一致，否则技能在 npm
-/// 上下文之外将静默找不到二进制——务必保持同步并配测试。
+/// 该键必须与 npm optionalDependency 包名 `@trad-skill/<key>` 一致
+/// （launcher `bin/trad-skill.js` 通过 `require.resolve('@trad-skill/<key>/...')`
+/// 解析平台二进制），否则将静默找不到二进制——务必保持同步并配测试。
 fn node_platform_key() -> String {
     let plat = match std::env::consts::OS {
         "windows" => "win32",
