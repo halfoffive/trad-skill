@@ -120,6 +120,8 @@ Trigger the skill by asking your AI agent to analyze a ticker:
 - "Run a multi-agent analysis on BTC-USD"
 - "Give me a trading analysis of 0700.HK"
 - "Analyze 600519 with 3 debate rounds"
+- "Analyze fund 000001 (华夏成长)"
+- "Analyze ETF 510300 (沪深300ETF)"
 
 The agent will orchestrate the full pipeline and produce a structured investment report ending with a summary table:
 
@@ -144,6 +146,12 @@ The agent will orchestrate the full pipeline and produce a structured investment
 - Use a 4-5 digit number + `.HK` suffix (e.g., 0700.HK or 00700.HK; `trad-skill` accepts both and zero-pads the code to 5 digits internally)
 - Data source: HK prices default to the Eastmoney APIs (secid 116.<5-digit code>); `--source yahoo` switches to the Yahoo channel
 - Stock Connect targets and HK main-board stocks are supported
+
+### China A-share fund notes
+
+- Fund codes are 6-digit (e.g. 000001), which COLLIDE with A-share stock codes (000001 平安银行). Use the `fund` subcommand to specify a fund: `trad-skill fund --symbol 000001`
+- ETFs (510xxx/159xxx) are analyzable via BOTH `stock` (price-based) and `fund` (NAV-based)
+- Data source: Eastmoney fund APIs only (no Yahoo fallback)
 
 ### Configuration
 
@@ -309,6 +317,7 @@ trad-skill news --symbol 0700.HK         # HK news via Eastmoney
 | `news` | `--limit 8`, 200-char summaries | `--limit N`, `--days N` |
 | `fundamentals` | compact key-metrics table | — |
 | `sentiment` | `--limit 15`, `--days 7` (Reddit), 8 messages/posts shown | `--limit N`, `--days N` |
+| `fund` | 公募基金/ETF/LOF：净值历史 + 基金资料 + 重仓股 + 业绩表现（东方财富） | `trad-skill fund --symbol 000001 --tail 30` |
 
 `stock --source` selects the data channel: by default US/Crypto use Yahoo Finance and A-shares/HK use Eastmoney, auto-detected from the symbol. Pass `--source eastmoney` to route US stocks through Eastmoney (handy when Yahoo is region-blocked), or `--source yahoo` to force Yahoo (A-share/HK symbols are mapped to `.SS`/`.SZ`/`.HK`). Eastmoney does not serve crypto.
 
