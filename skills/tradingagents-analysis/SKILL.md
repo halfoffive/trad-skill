@@ -64,6 +64,8 @@ This skill replicates the TradingAgents multi-agent pipeline, drawing on the ope
 3. The user may override any default inline (e.g. "用中文输出", "run 3 debate rounds"). Honor stated preferences.
 4. Only once a ticker is confirmed, proceed to the pipeline below.
 
+> **基金代码与股票代码冲突**：6 位基金代码（如 000001 华夏成长）与 A 股股票代码（000001 平安银行）冲突。当目标是基金时，用 `fund` 子命令显式指定：`trad-skill fund --symbol 000001`。`detect_market` 不自动识别基金——子命令名本身携带类型。
+
 ---
 
 ## 3. Pipeline Architecture
@@ -125,6 +127,8 @@ Spawn **four parallel sub-agents**, one per analyst role. Each sub-agent receive
    - `references/prompts/fundamentals_analyst.md`
 
    > **CN market prompt swap.** 当 `market` 为 A 股或港股时，用 `references/prompts/china_market_analyst.md` 替换 `market_analyst.md`，用 `references/prompts/cn_news_analyst.md` 替换 `news_analyst.md`；其余 2 个分析师（Sentiment / Fundamentals）保持不变。Stage 2 及之后的 researcher / manager / risk debator 等角色不受 `market` 影响（其 prompt 通用，不区分市场）。
+   >
+   > 当 `market` 为 A 股基金时，用 `references/prompts/fund_market_analyst.md` 替换 `market_analyst.md`，用 `fund_sentiment_analyst.md` 替换 `sentiment_analyst.md`，用 `fund_news_analyst.md` 替换 `news_analyst.md`，用 `fund_fundamentals_analyst.md` 替换 `fundamentals_analyst.md`；Stage 2 及之后角色不受影响。
 3. The **absolute path** to the `trad-skill` binary (see Section 6).
 
 ### Resolve the skill directory first (important)
@@ -237,6 +241,7 @@ The `trad-skill` Rust binary lives in this skill's `bin/<platform>/` directory. 
 | `trad-skill news` | Company news (US: Yahoo Finance + Google News RSS). Default `--limit 8` per source; all summaries truncated. | `trad-skill news --symbol AAPL --days 7 --limit 8` |
 | `trad-skill fundamentals` | **Compact key-metrics table** (revenue, net income, EPS, FCF, debt, margins, YoY) + company profile — instead of dumping full 4-year statements. | `trad-skill fundamentals --symbol AAPL` |
 | `trad-skill sentiment` | Social sentiment from StockTwits, Reddit. Default `--limit 15`, `--days 7` (Reddit window); message/post displays trimmed. | `trad-skill sentiment --symbol AAPL --limit 15 --days 7` |
+| `trad-skill fund` | 公募基金/ETF/LOF：净值历史 + 基金资料 + 重仓股 + 业绩表现（东方财富 fund API）。默认 `--tail 30`（净值历史尾行），`--days 365`（净值日期窗）。 | `trad-skill fund --symbol 000001 --tail 30` |
 
 > **China A-share market**: `trad-skill` supports A-share data via Eastmoney APIs. Use 6-digit symbols (e.g. `600519`) directly — e.g. `trad-skill stock --symbol 600519 --tail 30`.
 >
@@ -296,6 +301,7 @@ Close with a summary table:
 - Suffix `.HK` → 港股 (HK stocks)
 - Suffix `-USD` → Crypto
 - Everything else → US stocks
+- 基金（公募基金/ETF/LOF）不通过 `detect_market` 自动识别（代码与股票冲突）；用 `fund` 子命令显式指定。
 
 The user can override any of these by stating preferences explicitly (e.g., "用中文输出", "run 3 debate rounds").
 
