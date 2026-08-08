@@ -1,6 +1,6 @@
 [package]
 name = "trad-data"
-version = "1.9.3"
+version = "1.10.0"
 edition = "2021"
 description = "TradingAgents skill: installer + data fetcher (Rust binary)"
 license = "Apache-2.0"
@@ -17,6 +17,9 @@ serde = "1"
 serde_json = "1"
 quick-xml = "0.37"
 chrono = "0.4"
+# 东方财富基金接口返回 GBK 编码（响应头谎报 charset=utf-8），需按 GBK 解码。
+# 纯 Rust 实现，无 C 依赖，兼容全部 7 个构建目标。
+encoding_rs = "0.8"
 anyhow = "1"
 
 [dev-dependencies]

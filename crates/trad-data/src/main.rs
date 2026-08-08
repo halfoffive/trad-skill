@@ -1,4 +1,5 @@
 mod format;
+mod fund;
 mod fundamentals;
 mod http;
 mod indicators;
@@ -98,6 +99,15 @@ enum Commands {
         /// Reddit 帖子时间窗（天，默认 7）。仅美股/加密的 Reddit 源生效；
         /// ≤7 天按 week、>7 天按 month 过滤。
         #[arg(long, default_value_t = 7)]
+        days: u32,
+    },
+    /// 获取公募基金数据 (A股基金：净值/资料/重仓股/业绩)
+    Fund {
+        #[arg(long)]
+        symbol: String,
+        #[arg(long, default_value_t = 30)]
+        tail: u32,
+        #[arg(long, default_value_t = 365)]
         days: u32,
     },
     /// 安装 tradingagents-analysis 技能（无子命令时的默认行为）
@@ -270,6 +280,18 @@ async fn main() -> anyhow::Result<()> {
                 exit_with(2, "错误: --limit 必须 ≥ 1");
             }
             match sentiment::fetch_sentiment(&client, &symbol, limit, days).await {
+                Ok(out) => println!("{}", out),
+                Err(e) => exit_with(1, &e),
+            }
+        }
+        Some(Commands::Fund { symbol, tail, days }) => {
+            // 基金代码必须为 6 位纯数字（基金代码与股票代码冲突，子命令名携带类型）
+            let s = symbol.trim();
+            if s.len() != 6 || !s.chars().all(|c| c.is_ascii_digit()) {
+                exit_with(2, "错误: 基金代码必须为 6 位纯数字");
+            }
+            let tail = tail.clamp(1, 365);
+            match fund::fetch_fund(&client, s, tail, days).await {
                 Ok(out) => println!("{}", out),
                 Err(e) => exit_with(1, &e),
             }
