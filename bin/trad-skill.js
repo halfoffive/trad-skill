@@ -39,7 +39,7 @@ if (!npmBinary) {
 }
 
 // 数据子命令：这些子命令下，launcher 不注入 --skills-dir（透传用户参数）。
-const DATA_SUBCOMMANDS = new Set(['stock', 'news', 'fundamentals', 'sentiment']);
+const DATA_SUBCOMMANDS = new Set(['stock', 'news', 'fundamentals', 'sentiment', 'fund']);
 const userArgs = process.argv.slice(2);
 const isDataInvocation = userArgs[0] && DATA_SUBCOMMANDS.has(userArgs[0]);
 

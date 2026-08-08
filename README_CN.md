@@ -117,6 +117,8 @@ rm -rf /tmp/trad-skill
 - "帮我分析港股腾讯 0700.HK"
 - "交易分析：特斯拉 TSLA"
 - "投资研究：比亚迪 002594"
+- "分析基金 000001（华夏成长）"
+- "分析ETF 510300（沪深300ETF）"
 
 代理将编排完整的分析流水线，生成结构化的投资研究报告，报告末尾附一张汇总表：
 
@@ -141,6 +143,12 @@ rm -rf /tmp/trad-skill
 - 使用 4-5 位数字 + `.HK` 后缀（如 0700.HK 或 00700.HK；`trad-skill` 两种都接受，内部统一做 5 位零填充）
 - 数据源：港股行情默认走东方财富接口（secid 116.<5位代码>）；`--source yahoo` 可切换 Yahoo 通道
 - 支持港股通标的和港股主板股票
+
+### A股基金特别说明
+
+- 基金代码同为 6 位纯数字（如 000001），会与 A 股股票代码冲突（000001 是平安银行）。请使用 `fund` 子命令指定基金：`trad-skill fund --symbol 000001`
+- ETF（510xxx/159xxx）可通过 `stock`（基于价格）和 `fund`（基于净值）两种方式分析
+- 数据源：仅东方财富基金接口（无 Yahoo 回退）
 
 ---
 
@@ -312,6 +320,7 @@ trad-skill news --symbol 0700.HK         # 港股新闻走东方财富
 | `news` | `--limit 8`，200字符摘要 | `--limit N`, `--days N` |
 | `fundamentals` | 精简关键指标表 | — |
 | `sentiment` | `--limit 15`，`--days 7`（Reddit），8条消息/帖子 | `--limit N`, `--days N` |
+| `fund` | 公募基金/ETF/LOF：净值历史 + 基金资料 + 重仓股 + 业绩表现（东方财富） | `trad-skill fund --symbol 000001 --tail 30` |
 
 `stock --source` 用于选择数据渠道：默认按 symbol 自动识别——美股/加密货币走 Yahoo Finance，A股/港股走东方财富。传 `--source eastmoney` 可把美股改走东方财富（适用于 Yahoo 被区域封锁的场景）；传 `--source yahoo` 可强制走 Yahoo（A股/港股代码会映射为 `.SS`/`.SZ`/`.HK`）。东方财富不提供加密货币行情。
 
