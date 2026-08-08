@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0] - 2026-08-08
+
+### Added
+
+- **`fund` 子命令**：A股基金（公募基金/ETF/LOF）分析数据工具，取数自东方财富基金 API：净值历史（lsjz，JSON + callback 包装）、基金资料（jbgk，HTML 表格：基金经理/规模/成立日期/管理人与托管人）、重仓股（jjcc，含最新价/涨跌幅）、业绩表现（jdzf，阶段涨幅与同类排名）。GBK/UTF-8 双解码回退（`encoding_rs`，纯 Rust 无 C 依赖），日频限流保护（≤1 req/s）。
+- **4 个基金专属分析师 prompt**：`fund_market_analyst` / `fund_sentiment_analyst` / `fund_news_analyst` / `fund_fundamentals_analyst`（`skills/tradingagents-analysis/references/prompts/`），按 `china_market_analyst.md` 结构撰写，含内联「数据来源」段（`trad-skill fund` / 网页搜索兜底）。
+- **SKILL.md §2/§4/§6/§8 基金分析文档**：§2 基金代码与股票代码冲突提示、§4 基金分析 agent 编排与 prompt 替换说明、§6 `trad-skill fund` 命令表行、§8 基金市场识别规则。
+- **README/README_CN A股基金用法**：Usage 触发示例（「Analyze fund 000001（华夏成长）」/「Analyze ETF 510300（沪深300ETF）」）、Data Tool 命令表 `fund` 行、A股基金特别说明（6 位代码与股票代码冲突、ETF 双通道、仅东方财富基金 API）。
+- **data-sources.md China Fund Sources**：4 个东方财富基金端点（含 Referer 要求、GBK 编码、限流）与 A 股基金数据降级说明。
+
+### Notes
+
+- `package.json` `version`: `1.9.3` -> `1.10.0`（+ 5 个 `optionalDependencies` `@trad-skill/*` pin）。
+- `crates/trad-data/Cargo.toml` `version`: `1.9.3` -> `1.10.0`。
+- 5 个 `npm/<platform>/package.json` `version`: `1.9.3` -> `1.10.0`。
+- `crates/trad-data/Cargo.lock` 同步至 `1.10.0`（`cargo build` 重新生成）。
+- **偏差（deviation）**：基金专属 prompt（T5）为**新撰写**而非逐字提取——本机无 TradingAgents-CN fork 可作逐字来源。这偏离了 AGENTS.md 的「When updating prompts, re-extract verbatim from source — never rewrite from memory」规则；已按 `china_market_analyst.md` 既有结构撰写，并在 T7 的 prompts/README.md 中标注 Source Repo: "Authored new"。
+
 ## [1.9.3] - 2026-08-04
 
 ### Fixed
