@@ -87,6 +87,36 @@ Complete catalog of data sources used in the TradingAgents multi-agent analysis 
 - **Markets**: A-shares
 - **Used by**: Sentiment Analyst (CN) — the trad-skill binary fetches 千股千评 / 机构参与度 from the Eastmoney datacenter API (the semantic equivalent of the fork's akshare sources)
 
+## China Fund Sources (公募基金/ETF/LOF)
+
+All four fund endpoints are Eastmoney APIs, wired into the `trad-skill fund` subcommand. Agents may also hit them directly via web search/browser fallback. **All four endpoints return GBK-encoded bodies** (despite response headers claiming `charset=utf-8`) — decode as GBK before parsing.
+
+### Eastmoney Fund NAV History
+- **Endpoint**: `api.fund.eastmoney.com/f10/lsjz` (JSON)
+- **Params**: `fundCode`, `pageIndex`, `pageSize`, `startDate`, `endDate`, `callback=`
+- **Fields**: FSRQ (date), DWJZ (unit NAV), LJJZ (cumulative NAV), JZZZL (NAV growth %), SGZT (subscription status), SHZT (redemption status)
+- **Headers**: requires `Referer: https://fund.eastmoney.com/`; the `callback=` param must be present (JSONP wrapper)
+- **Encoding**: GBK despite the utf-8 header
+
+### Eastmoney Fund Profile (基金概况)
+- **Endpoint**: `fundf10.eastmoney.com/jbgk_{code}.html` (HTML table)
+- **Fields**: 基金全称, 类型, 成立日期, 规模, 经理, 管理人, 托管人
+- **Encoding**: GBK
+
+### Eastmoney Fund Holdings (重仓股)
+- **Endpoint**: `fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=<code>&topline=10&year=<year>` (JS+HTML)
+- **Response shape**: `var apidata={content:"<escaped HTML table>"};`
+- **Headers**: requires `Referer: https://fundf10.eastmoney.com/ccmx_{code}.html`
+- **Encoding**: GBK
+
+### Eastmoney Fund Performance (阶段涨幅)
+- **Endpoint**: `fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jdzf&code=<code>` (JS+HTML)
+- **Response shape**: `var apidata={content:"<escaped HTML table>"};`
+- **Headers**: requires `Referer: https://fundf10.eastmoney.com/jdzf_{code}.html`
+- **Encoding**: GBK
+
+**Rate limit**: ≤ 1 request/sec sustained; a single-call burst of 3-4 requests is acceptable.
+
 ## Data Source Degradation Chains
 
 ### A-Share Data (CN)
@@ -109,6 +139,9 @@ Eastmoney search API → Google News (Chinese)
 
 ### Fundamentals (US / A-share / HK)
 US/Crypto: Yahoo Finance quoteSummary v10 + fundamentals-timeseries. A-share/HK: Eastmoney push2 + datacenter. No cross-channel fallback for fundamentals.
+
+### A-Share Fund Data
+Eastmoney only (no Yahoo fallback; Yahoo has no Chinese fund data).
 
 ## Configuration
 

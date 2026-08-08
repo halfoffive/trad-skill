@@ -28,6 +28,10 @@ Analysts (parallel) → Research Debate (sequential) → Decision → Risk Debat
 | 12 | [conservative_risk.md](conservative_risk.md) | Conservative Risk Analyst | Risk Debate | TradingAgents |
 | 13 | [neutral_risk.md](neutral_risk.md) | Neutral Risk Analyst | Risk Debate | TradingAgents |
 | 14 | [portfolio_manager.md](portfolio_manager.md) | Portfolio Manager | Final Decision | TradingAgents |
+| 15 | [fund_market_analyst.md](fund_market_analyst.md) | Fund Market Analyst | Analyst (fund) | Authored new |
+| 16 | [fund_sentiment_analyst.md](fund_sentiment_analyst.md) | Fund Sentiment Analyst | Analyst (fund) | Authored new |
+| 17 | [fund_news_analyst.md](fund_news_analyst.md) | Fund News Analyst | Analyst (fund) | Authored new |
+| 18 | [fund_fundamentals_analyst.md](fund_fundamentals_analyst.md) | Fund Fundamentals Analyst | Analyst (fund) | Authored new |
 
 ## Stage Details
 
@@ -38,6 +42,10 @@ Analysts (parallel) → Research Debate (sequential) → Decision → Risk Debat
 - **Fundamentals Analyst**: Financial statements, balance sheet, cash flow, income statement analysis
 - **China Market Analyst** (CN): A-share/HK-specific analysis (Tushare referenced in the verbatim prompt but not wired — the trad-skill binary uses Eastmoney), T+1 rules, price limits
 - **CN News Analyst** (CN): Chinese financial news analysis with timeliness and impact assessment
+- **Fund Market Analyst** (fund): NAV-based market analysis for A-share funds (公募基金/ETF/LOF), covering unit/cumulative NAV trends, NAV growth volatility, benchmark-relative performance (沪深300), drawdowns, and scale effects. Data source: `trad-skill fund`.
+- **Fund Sentiment Analyst** (fund): Fund-specific sentiment from 申购/赎回 status (SGZT/SHZT), institutional holdings changes, and holder sentiment inferred from subscription/redemption limits. Data source: `trad-skill fund`.
+- **Fund News Analyst** (fund): Fund news research by fund name via web-search (fund codes collide with stock codes, so `trad-skill news` is ETF-only and optional). Data source: web-search.
+- **Fund Fundamentals Analyst** (fund): Fund profile and holdings analysis (基金全称/类型/规模/经理/管理人/托管人, top-10 重仓股, 业绩表现), replacing company financial statements. Data source: `trad-skill fund`.
 
 ### Research Debate (sequential, multi-round)
 - **Bull Researcher**: Advocates for investing, counters bear arguments
@@ -72,6 +80,8 @@ The table below defines the substitution for every variable found across `refere
 | `{asset_label}` | The literal word `company` for equities or `asset` for crypto. Used in `news_analyst.md` (e.g. "for {asset_label}-specific news" → "for company-specific news"). Matches source `news_analyst.py:17`. |
 | `{company_name}` | The company name if known from `trad-skill fundamentals` profile (`longName`); otherwise the ticker. |
 | `{fundamentals_label}` | The full label string `Company fundamentals report` for equities, or `Asset fundamentals report (may be unavailable for crypto)` for crypto. Used as a section header in bull/bear prompts (e.g. "{fundamentals_label}: {fundamentals_report}"). Matches source `bull_researcher.py:22-25` / `bear_researcher.py:26-29`. |
+
+> For funds: `{target_label}` = `fund`, `{asset_label}` = `fund`, `{fundamentals_label}` = `Fund fundamentals report`, `{instrument_context}` = `Market: A股基金; Ticker: <code>; Trade date: <date>`.
 
 ### Dates
 
@@ -154,6 +164,11 @@ Some verbatim prompts instruct the agent to call tools like `get_stock_data`, `g
 ### Sentiment Analyst tools (`sentiment_analyst.md`)
 
 - The verbatim prompt expects pre-fetched `{news_block}` / `{stocktwits_block}` / `{reddit_block}` data blocks (see "Template Variable Substitution" above). The data source is `trad-skill sentiment --symbol <ticker> --limit 15`; the command output fills the StockTwits and Reddit blocks. The news block is not provided by the sentiment command (the News Analyst separately covers news).
+
+### Fund Analyst tools (`fund_market_analyst.md` / `fund_sentiment_analyst.md` / `fund_news_analyst.md` / `fund_fundamentals_analyst.md`)
+
+- The fund prompt files describe their data sources inline and reference no `get_*` ghost tools. Data source: `trad-skill fund --symbol <ticker>` (market / sentiment / fundamentals analysts).
+- Fund News Analyst: web-search by fund name is the primary source. `trad-skill news --symbol <ticker>` fetches stock news and would hit the wrong asset for a 6-digit fund code that collides with a stock code (e.g. 000001); it may return usable news for ETFs only, and the prompt itself qualifies that exception.
 
 Do not modify the verbatim prompt files. The overrides live in `SKILL.md` §4, `indicators.md`, and the table below.
 
